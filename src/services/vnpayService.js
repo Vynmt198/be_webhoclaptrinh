@@ -85,6 +85,58 @@ class VNPayService {
             vnp_SecureHash: signed,
         };
     }
+
+    async refundTransaction(orderId, amount, transDate, user) {
+        const date = new Date();
+        const requestId = date.getTime().toString();
+        const createDate = date.toISOString().replace(/[-:TZ.]/g, '').slice(0, 14);
+
+        const data = {
+            vnp_RequestId: requestId,
+            vnp_Version: '2.1.0',
+            vnp_Command: 'refund',
+            vnp_TmnCode: vnpayConfig.vnp_TmnCode,
+            vnp_TransactionType: '02',
+            vnp_TxnRef: orderId,
+            vnp_Amount: amount * 100,
+            vnp_OrderInfo: 'Refund transaction ' + orderId,
+            vnp_TransactionNo: '',
+            vnp_TransactionDate: transDate,
+            vnp_CreateDate: createDate,
+            vnp_CreateBy: user,
+            vnp_IpAddr: '127.0.0.1',
+        };
+
+        const sortedData = this.sortObject(data);
+        const signData = querystring.stringify(sortedData, { encode: false });
+        const hmac = crypto.createHmac('sha512', vnpayConfig.vnp_HashSecret);
+        const signed = hmac.update(Buffer.from(signData, 'utf-8')).digest('hex');
+
+        return {
+            ...data,
+            vnp_SecureHash: signed,
+        };
+    }
+
+    getPaymentStatus(responseCode) {
+        const statusMap = {
+            '00': 'Giao dịch thành công',
+            '07': 'Trừ tiền thành công. Giao dịch bị nghi ngờ (liên quan tới lừa đảo, giao dịch bất thường)',
+            '09': 'Giao dịch không thành công do: Thẻ/Tài khoản của khách hàng chưa đăng ký dịch vụ InternetBanking tại ngân hàng',
+            '10': 'Giao dịch không thành công do: Khách hàng xác thực thông tin thẻ/tài khoản không đúng quá 3 lần',
+            '11': 'Giao dịch không thành công do: Đã hết hạn chờ thanh toán. Xin quý khách vui lòng thực hiện lại giao dịch',
+            '12': 'Giao dịch không thành công do: Thẻ/Tài khoản của khách hàng bị khóa',
+            '13': 'Giao dịch không thành công do Quý khách nhập sai mật khẩu xác thực giao dịch (OTP)',
+            '24': 'Giao dịch không thành công do: Khách hàng hủy giao dịch',
+            '51': 'Giao dịch không thành công do: Tài khoản của quý khách không đủ số dư để thực hiện giao dịch',
+            '65': 'Giao dịch không thành công do: Tài khoản của Quý khách đã vượt quá hạn mức giao dịch trong ngày',
+            '75': 'Ngân hàng thanh toán đang bảo trì',
+            '79': 'Giao dịch không thành công do: KH nhập sai mật khẩu thanh toán quá số lần quy định',
+            '99': 'Các lỗi khác',
+        };
+
+        return statusMap[responseCode] || 'Lỗi không xác định';
+    }
 }
 
 module.exports = new VNPayService();

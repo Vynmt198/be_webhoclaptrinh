@@ -1,5 +1,17 @@
 const Payment = require('../models/Payment');
 const vnpayService = require('../services/vnpayService');
+const vnpayBanks = require('../utils/vnpayBanks');
+
+exports.getBankList = async (req, res, next) => {
+    try {
+        res.status(200).json({
+            success: true,
+            data: vnpayBanks,
+        });
+    } catch (error) {
+        next(error);
+    }
+};
 
 exports.createPayment = async (req, res, next) => {
     try {
@@ -88,7 +100,7 @@ exports.vnpayReturn = async (req, res, next) => {
 
         res.status(200).json({
             success: responseCode === '00',
-            message: responseCode === '00' ? 'Payment successful' : 'Payment failed',
+            message: vnpayService.getPaymentStatus(responseCode),
             data: {
                 orderId,
                 amount: payment.amount,
@@ -198,6 +210,49 @@ exports.getPaymentDetail = async (req, res, next) => {
         res.status(200).json({
             success: true,
             data: payment,
+        });
+    } catch (error) {
+        next(error);
+    }
+};
+
+
+exports.getPaymentStats = async (req, res, next) => {
+    try {
+        const userId = req.user._id;
+        const { startDate, endDate } = req.query;
+
+        const query = { userId };
+        if (startDate || endDate) {
+            query.createdAt = {};
+            if (startDate) query.createdAt.$gte = new Date(startDate);
+            if (endDate) query.createdAt.$lte = new Date(endDate);
+        }
+
+        const stats = await Payment.aggregate([
+            { $match: query },
+            {
+                $group: {
+                    _id: '$paymentStatus',
+                    count: { $sum: 1 },
+                    totalAmount: { $sum: '$amount' },
+                },
+            },
+        ]);
+
+        const total = await Payment.countDocuments(query);
+        const totalAmount = await Payment.aggregate([
+            { $match: { ...query, paymentStatus: 'success' } },
+            { $group: { _id: null, total: { $sum: '$amount' } } },
+        ]);
+
+        res.status(200).json({
+            success: true,
+            data: {
+                stats,
+                total,
+                totalSuccessAmount: totalAmount[0]?.total || 0,
+            },
         });
     } catch (error) {
         next(error);
