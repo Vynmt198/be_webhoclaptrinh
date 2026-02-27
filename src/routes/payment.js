@@ -2,6 +2,35 @@ const express = require('express');
 const router = express.Router();
 const paymentController = require('../controllers/paymentController');
 const auth = require('../middleware/auth');
+const { validateCreatePayment } = require('../utils/paymentValidator');
+
+/**
+ * @swagger
+ * /api/payment/banks:
+ *   get:
+ *     summary: Lấy danh sách ngân hàng hỗ trợ
+ *     tags: [Payment]
+ *     responses:
+ *       200:
+ *         description: Danh sách ngân hàng
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       code:
+ *                         type: string
+ *                       name:
+ *                         type: string
+ */
+router.get('/banks', paymentController.getBankList);
 
 /**
  * @swagger
@@ -33,7 +62,7 @@ const auth = require('../middleware/auth');
  *       200:
  *         description: Payment URL created successfully
  */
-router.post('/create', auth, paymentController.createPayment);
+router.post('/create', auth, validateCreatePayment, paymentController.createPayment);
 
 /**
  * @swagger
@@ -113,5 +142,30 @@ router.get('/history', auth, paymentController.getPaymentHistory);
  *         description: Payment detail
  */
 router.get('/:orderId', auth, paymentController.getPaymentDetail);
+
+/**
+ * @swagger
+ * /api/payment/stats:
+ *   get:
+ *     summary: Thống kê thanh toán
+ *     tags: [Payment]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: startDate
+ *         schema:
+ *           type: string
+ *           format: date
+ *       - in: query
+ *         name: endDate
+ *         schema:
+ *           type: string
+ *           format: date
+ *     responses:
+ *       200:
+ *         description: Payment statistics
+ */
+router.get('/stats/summary', auth, paymentController.getPaymentStats);
 
 module.exports = router;
