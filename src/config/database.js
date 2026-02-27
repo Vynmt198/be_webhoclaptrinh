@@ -2,6 +2,11 @@ const mongoose = require('mongoose');
 
 const connectDB = async () => {
     try {
+        if (!process.env.MONGODB_URI) {
+            console.warn('[DB] MONGODB_URI not set. Running without database.');
+            return;
+        }
+
         const conn = await mongoose.connect(process.env.MONGODB_URI, {
             maxPoolSize: 10,
             serverSelectionTimeoutMS: 5000,
@@ -11,7 +16,7 @@ const connectDB = async () => {
         console.log(`[DB] MongoDB connected: ${conn.connection.host}`);
     } catch (error) {
         console.error(`[DB] Connection error: ${error.message}`);
-        process.exit(1);
+        console.warn('[DB] Continuing without database connection...');
     }
 };
 mongoose.connection.on('disconnected', () => {
