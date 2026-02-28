@@ -14,6 +14,8 @@ const authRoutes = require('./routes/auth');
 const userRoutes = require('./routes/users');
 const adminRoutes = require('./routes/admin');
 const paymentRoutes = require('./routes/payment');
+const reviewRoutes = require('./routes/reviews');
+const { getCourseReviews } = require('./controllers/reviewController');
 
 const app = express();
 
@@ -42,6 +44,8 @@ app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/payment', paymentRoutes);
+app.use('/api/reviews', reviewRoutes);
+app.get('/api/courses/:id/reviews', getCourseReviews);
 
 app.get('/api/health', (req, res) => {
     res.status(200).json({
