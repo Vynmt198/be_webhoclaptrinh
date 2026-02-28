@@ -44,4 +44,104 @@ const requireRole = (...roles) => {
     };
 };
 
-module.exports = { isAdmin, isInstructor, requireRole };
+/**
+ * Check if user is enrolled in a course
+ * Requires Enrollment model to be implemented
+ */
+const isEnrolled = (courseIdParam = 'courseId') => {
+    return async (req, res, next) => {
+        try {
+            let Enrollment;
+            try {
+                Enrollment = require('../models/Enrollment');
+            } catch (err) {
+                return res.status(500).json({
+                    success: false,
+                    message: 'Enrollment check is not available. Enrollment model is missing.',
+                });
+            }
+
+            const courseId = req.params[courseIdParam] || req.body.courseId;
+            const userId = req.user._id;
+
+            const enrollment = await Enrollment.findOne({
+                userId,
+                courseId,
+                status: 'active',
+            });
+
+            if (!enrollment) {
+                return res.status(403).json({
+                    success: false,
+                    message: 'You must be enrolled in this course to access this resource.',
+                });
+            }
+
+            req.enrollment = enrollment;
+            next();
+        } catch (error) {
+            next(error);
+        }
+    };
+};
+
+/**
+ * Check if user is the owner of a review
+ * Requires id and userId fields to be populated in req
+ */
+const isReviewOwner = async (req, res, next) => {
+    try {
+        const Review = require('../models/Review');
+        const review = await Review.findById(req.params.id);
+
+        if (!review) {
+            return res.status(404).json({
+                success: false,
+                message: 'Review not found.',
+            });
+        }
+
+        if (review.userId.toString() !== req.user._id.toString()) {
+            return res.status(403).json({
+                success: false,
+                message: 'You can only access your own review.',
+            });
+        }
+
+        req.review = review;
+        next();
+    } catch (error) {
+        next(error);
+    }
+};
+
+const isReviewOwnerOrAdmin = async (req, res, next) => {
+    try {
+        const Review = require('../models/Review');
+        const review = await Review.findById(req.params.id);
+
+        if (!review) {
+            return res.status(404).json({
+                success: false,
+                message: 'Review not found.',
+            });
+        }
+
+        const isOwnerUser = review.userId.toString() === req.user._id.toString();
+        const isAdminUser = req.user.role === 'admin';
+
+        if (!isOwnerUser && !isAdminUser) {
+            return res.status(403).json({
+                success: false,
+                message: 'Access denied. Owner or admin privileges required.',
+            });
+        }
+
+        req.review = review;
+        next();
+    } catch (error) {
+        next(error);
+    }
+};
+
+module.exports = { isAdmin, isInstructor, requireRole, isEnrolled, isReviewOwner, isReviewOwnerOrAdmin };
