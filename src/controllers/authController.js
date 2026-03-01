@@ -9,7 +9,6 @@ const register = async (req, res, next) => {
     try {
         const { email, password, fullName } = req.body;
 
-        // Check email uniqueness (BR1)
         const existingUser = await User.findOne({ email });
         if (existingUser) {
             return res.status(409).json({
@@ -127,7 +126,6 @@ const forgotPassword = async (req, res, next) => {
         return res.status(200).json({
             success: true,
             message: 'If that email exists, a password reset link has been sent.',
-            // In development, expose token for testing
             ...(process.env.NODE_ENV === 'development' && { dev_token: plainToken }),
         });
     } catch (error) {
