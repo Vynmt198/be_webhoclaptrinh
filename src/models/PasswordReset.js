@@ -14,7 +14,7 @@ const passwordResetSchema = new mongoose.Schema({
     expiresAt: {
         type: Date,
         required: true,
-        default: () => new Date(Date.now() + 15 * 60 * 1000), // 15 minutes
+        default: () => new Date(Date.now() + 15 * 60 * 1000),
     },
     createdAt: {
         type: Date,

@@ -95,6 +95,33 @@ const validateChangePassword = [
     validate,
 ];
 
+// Review validation
+const validateCreateReview = [
+    body('courseId')
+        .trim()
+        .notEmpty().withMessage('Course ID is required')
+        .isMongoId().withMessage('Course ID must be a valid MongoDB ID'),
+    body('rating')
+        .notEmpty().withMessage('Rating is required')
+        .isInt({ min: 1, max: 5 }).withMessage('Rating must be between 1 and 5'),
+    body('reviewText')
+        .optional()
+        .trim()
+        .isLength({ max: 1000 }).withMessage('Review text cannot exceed 1000 characters'),
+    validate,
+];
+
+const validateUpdateReview = [
+    body('rating')
+        .optional()
+        .isInt({ min: 1, max: 5 }).withMessage('Rating must be between 1 and 5'),
+    body('reviewText')
+        .optional()
+        .trim()
+        .isLength({ max: 1000 }).withMessage('Review text cannot exceed 1000 characters'),
+    validate,
+];
+
 module.exports = {
     validateRegister,
     validateLogin,
@@ -102,4 +129,6 @@ module.exports = {
     validateResetToken,
     validateUpdateProfile,
     validateChangePassword,
+    validateCreateReview,
+    validateUpdateReview,
 };
