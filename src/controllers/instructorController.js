@@ -22,7 +22,7 @@ exports.getCourseAnalytics = async (req, res, next) => {
         }
 
         // Active enrollments
-        const totalEnrollments = await Enrollment.countDocuments({ courseId, status: 'Active' });
+        const totalEnrollments = await Enrollment.countDocuments({ courseId, status: 'active' });
 
         // Total time spent by all learners
         const progressStats = await Progress.aggregate([

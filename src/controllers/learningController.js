@@ -15,7 +15,7 @@ exports.getCourseLearningData = async (req, res, next) => {
             return res.status(404).json({ success: false, message: 'Course not found' });
         }
 
-        if (course.status !== 'Active') {
+        if (course.status !== 'active') {
             return res.status(403).json({ success: false, message: 'This course is not active' });
         }
 
