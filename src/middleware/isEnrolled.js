@@ -42,7 +42,7 @@ const isEnrolled = async (req, res, next) => {
         const enrollment = await Enrollment.findOne({
             userId: req.user._id,
             courseId: courseId,
-            status: 'Active'
+            status: 'active'
         });
 
         if (!enrollment) {

@@ -43,6 +43,16 @@ const userSchema = new mongoose.Schema(
             type: String,
             default: null,
         },
+        phone: {
+            type: String,
+            default: null,
+            trim: true,
+        },
+        bio: {
+            type: String,
+            default: null,
+            maxlength: [500, 'Bio cannot exceed 500 characters'],
+        },
         lastLogin: {
             type: Date,
             default: null,
