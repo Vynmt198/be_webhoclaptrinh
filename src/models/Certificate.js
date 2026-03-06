@@ -1,8 +1,8 @@
 const mongoose = require('mongoose');
 
 /**
- * Certificate - UC17 View Certificate
- * BR16: Chỉ cấp khi hoàn thành 100% khóa học và pass assessments
+ * Certificate - UC17 Generate/View Certificate
+ * BR16: Only issued when 100% course completion + all quizzes passed
  */
 const certificateSchema = new mongoose.Schema(
     {
@@ -16,7 +16,7 @@ const certificateSchema = new mongoose.Schema(
             ref: 'Course',
             required: true,
         },
-        certificateNo: {
+        certificateId: {
             type: String,
             unique: true,
             required: true,
@@ -25,11 +25,19 @@ const certificateSchema = new mongoose.Schema(
             type: Date,
             default: Date.now,
         },
+        pdfUrl: {
+            type: String,
+            default: null,
+        },
+        verificationUrl: {
+            type: String,
+            default: null,
+        },
     },
     { timestamps: true }
 );
 
 certificateSchema.index({ userId: 1, courseId: 1 }, { unique: true });
-certificateSchema.index({ certificateNo: 1 });
+// Note: certificateId index is created automatically via unique:true on the field
 
 module.exports = mongoose.model('Certificate', certificateSchema);
