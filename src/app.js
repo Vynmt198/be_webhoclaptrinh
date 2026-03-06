@@ -20,6 +20,8 @@ const lessonsLearningRoutes = require('./routes/lessonsLearning');
 const progressRoutes = require('./routes/progress');
 const quizzesRoutes = require('./routes/quizzes');
 const instructorRoutes = require('./routes/instructor');
+const certificateRoutes = require('./routes/certificates');
+const discussionRoutes = require('./routes/discussions');
 const { getCourseReviews } = require('./controllers/reviewController');
 
 const app = express();
@@ -55,6 +57,8 @@ app.use('/api/lessons', lessonsLearningRoutes);
 app.use('/api/progress', progressRoutes);
 app.use('/api/quizzes', quizzesRoutes);
 app.use('/api/instructor', instructorRoutes);
+app.use('/api/certificates', certificateRoutes);
+app.use('/api/discussions', discussionRoutes);
 app.get('/api/courses/:id/reviews', getCourseReviews);
 
 app.get('/api/health', (req, res) => {

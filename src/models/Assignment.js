@@ -14,7 +14,7 @@ const assignmentSchema = new mongoose.Schema(
         lessonId: {
             type: mongoose.Schema.Types.ObjectId,
             ref: 'Lesson',
-            default: null, // Có thể gắn với lesson hoặc độc lập
+            default: null,
         },
         title: {
             type: String,
