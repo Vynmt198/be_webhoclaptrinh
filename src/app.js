@@ -15,7 +15,8 @@ const userRoutes = require('./routes/users');
 const adminRoutes = require('./routes/admin');
 const paymentRoutes = require('./routes/payment');
 const reviewRoutes = require('./routes/reviews');
-const { getCourseReviews } = require('./controllers/reviewController');
+// [MODULE 5 - TEMP] Khi merge với Module 2 (Course): xóa dòng dưới và move endpoint vào routes/courses.js
+const courseReviewRoutes = require('./routes/courseReviews');
 
 const app = express();
 
@@ -45,7 +46,8 @@ app.use('/api/users', userRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/payment', paymentRoutes);
 app.use('/api/reviews', reviewRoutes);
-app.get('/api/courses/:id/reviews', getCourseReviews);
+// [MODULE 5 - TEMP] Khi merge với Module 2 (Course): xóa dòng dưới và move endpoint vào routes/courses.js
+app.use('/api/courses', courseReviewRoutes);
 
 app.get('/api/health', (req, res) => {
     res.status(200).json({
