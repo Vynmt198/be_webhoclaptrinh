@@ -12,37 +12,55 @@ class VNPayService {
         return sorted;
     }
 
-    createPaymentUrl(orderId, amount, orderInfo, ipAddr, bankCode = '') {
+    createPaymentUrl(orderId, amount, orderInfo, ipAddr) {
         const date = new Date();
         const createDate = date.toISOString().replace(/[-:TZ.]/g, '').slice(0, 14);
-        
+
+        // Thêm 15 phút cho expire date (bắt buộc theo tài liệu VNPay)
+        const expireDate = new Date(date.getTime() + 15 * 60 * 1000);
+        const vnp_ExpireDate = expireDate.toISOString().replace(/[-:TZ.]/g, '').slice(0, 14);
+
         let vnp_Params = {
             vnp_Version: '2.1.0',
             vnp_Command: 'pay',
             vnp_TmnCode: vnpayConfig.vnp_TmnCode,
-            vnp_Locale: 'vn',
+            vnp_Amount: amount * 100,
             vnp_CurrCode: 'VND',
             vnp_TxnRef: orderId,
             vnp_OrderInfo: orderInfo,
             vnp_OrderType: 'other',
-            vnp_Amount: amount * 100,
+            vnp_Locale: 'vn',
             vnp_ReturnUrl: vnpayConfig.vnp_ReturnUrl,
             vnp_IpAddr: ipAddr,
             vnp_CreateDate: createDate,
+            vnp_ExpireDate: vnp_ExpireDate,
         };
-
-        if (bankCode) {
-            vnp_Params.vnp_BankCode = bankCode;
-        }
 
         vnp_Params = this.sortObject(vnp_Params);
 
-        const signData = querystring.stringify(vnp_Params, { encode: false });
+        // Tạo chuỗi hash data theo chuẩn VNPay 2.1.0
+        let signData = '';
+        const sortedKeys = Object.keys(vnp_Params);
+        sortedKeys.forEach((key, index) => {
+            const value = vnp_Params[key];
+            if (index > 0) {
+                signData += '&';
+            }
+            signData += encodeURIComponent(key) + '=' + encodeURIComponent(value);
+        });
+
         const hmac = crypto.createHmac('sha512', vnpayConfig.vnp_HashSecret);
         const signed = hmac.update(Buffer.from(signData, 'utf-8')).digest('hex');
         vnp_Params.vnp_SecureHash = signed;
 
-        return vnpayConfig.vnp_Url + '?' + querystring.stringify(vnp_Params, { encode: false });
+        const paymentUrl = vnpayConfig.vnp_Url + '?' + querystring.stringify(vnp_Params, { encode: true });
+
+        console.log('VNPay Parameters:', vnp_Params);
+        console.log('Sign Data:', signData);
+        console.log('Secure Hash:', signed);
+        console.log('Payment URL:', paymentUrl);
+
+        return paymentUrl;
     }
 
     verifyReturnUrl(vnp_Params) {
@@ -51,71 +69,22 @@ class VNPayService {
         delete vnp_Params.vnp_SecureHashType;
 
         const sortedParams = this.sortObject(vnp_Params);
-        const signData = querystring.stringify(sortedParams, { encode: false });
+
+        // Tạo chuỗi hash data theo chuẩn VNPay 2.1.0
+        let signData = '';
+        const sortedKeys = Object.keys(sortedParams);
+        sortedKeys.forEach((key, index) => {
+            const value = sortedParams[key];
+            if (index > 0) {
+                signData += '&';
+            }
+            signData += encodeURIComponent(key) + '=' + encodeURIComponent(value);
+        });
+
         const hmac = crypto.createHmac('sha512', vnpayConfig.vnp_HashSecret);
         const signed = hmac.update(Buffer.from(signData, 'utf-8')).digest('hex');
 
         return secureHash === signed;
-    }
-
-    async queryTransaction(orderId, transDate) {
-        const date = new Date();
-        const requestId = date.getTime().toString();
-        const createDate = date.toISOString().replace(/[-:TZ.]/g, '').slice(0, 14);
-
-        const data = {
-            vnp_RequestId: requestId,
-            vnp_Version: '2.1.0',
-            vnp_Command: 'querydr',
-            vnp_TmnCode: vnpayConfig.vnp_TmnCode,
-            vnp_TxnRef: orderId,
-            vnp_OrderInfo: 'Query transaction ' + orderId,
-            vnp_TransactionDate: transDate,
-            vnp_CreateDate: createDate,
-            vnp_IpAddr: '127.0.0.1',
-        };
-
-        const sortedData = this.sortObject(data);
-        const signData = querystring.stringify(sortedData, { encode: false });
-        const hmac = crypto.createHmac('sha512', vnpayConfig.vnp_HashSecret);
-        const signed = hmac.update(Buffer.from(signData, 'utf-8')).digest('hex');
-
-        return {
-            ...data,
-            vnp_SecureHash: signed,
-        };
-    }
-
-    async refundTransaction(orderId, amount, transDate, user) {
-        const date = new Date();
-        const requestId = date.getTime().toString();
-        const createDate = date.toISOString().replace(/[-:TZ.]/g, '').slice(0, 14);
-
-        const data = {
-            vnp_RequestId: requestId,
-            vnp_Version: '2.1.0',
-            vnp_Command: 'refund',
-            vnp_TmnCode: vnpayConfig.vnp_TmnCode,
-            vnp_TransactionType: '02',
-            vnp_TxnRef: orderId,
-            vnp_Amount: amount * 100,
-            vnp_OrderInfo: 'Refund transaction ' + orderId,
-            vnp_TransactionNo: '',
-            vnp_TransactionDate: transDate,
-            vnp_CreateDate: createDate,
-            vnp_CreateBy: user,
-            vnp_IpAddr: '127.0.0.1',
-        };
-
-        const sortedData = this.sortObject(data);
-        const signData = querystring.stringify(sortedData, { encode: false });
-        const hmac = crypto.createHmac('sha512', vnpayConfig.vnp_HashSecret);
-        const signed = hmac.update(Buffer.from(signData, 'utf-8')).digest('hex');
-
-        return {
-            ...data,
-            vnp_SecureHash: signed,
-        };
     }
 
     getPaymentStatus(responseCode) {
