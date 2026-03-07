@@ -2,8 +2,8 @@ import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'motion/react';
 import {
-    Users, Search, ChevronLeft, ChevronRight, Trash2,
-    ToggleLeft, ToggleRight, Shield, Loader2, AlertTriangle,
+    Users, Search, ChevronLeft, ChevronRight,
+    ToggleLeft, ToggleRight, Loader2,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { adminApi, type User, type Pagination } from '@/app/lib/api';
@@ -21,7 +21,6 @@ export function AdminUsers() {
     const [search, setSearch] = useState('');
     const [roleFilter, setRoleFilter] = useState('');
     const [page, setPage] = useState(1);
-    const [confirmDelete, setConfirmDelete] = useState<User | null>(null);
     const [actionLoading, setActionLoading] = useState<string | null>(null);
 
     // Admin guard
@@ -80,19 +79,6 @@ export function AdminUsers() {
         }
     };
 
-    const handleDelete = async (userId: string) => {
-        setActionLoading(userId + '-delete');
-        try {
-            await adminApi.deleteUser(userId);
-            setUsers((prev) => prev.filter((u) => u._id !== userId));
-            toast.success('Xóa người dùng thành công.');
-            setConfirmDelete(null);
-        } catch (err: unknown) {
-            toast.error(err instanceof Error ? err.message : 'Xóa thất bại.');
-        } finally {
-            setActionLoading(null);
-        }
-    };
 
     const roleBadge = (role: string) => {
         const map: Record<string, string> = {
@@ -106,200 +92,145 @@ export function AdminUsers() {
     if (authLoading) return null;
 
     return (
-        <div className="min-h-screen py-12">
-            <div className="container mx-auto px-4">
-                <motion.div
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    className="mb-8"
+        <div className="space-y-6">
+            <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="mb-8"
+            >
+                <h1 className="text-3xl font-bold mb-2">Quản lý người dùng</h1>
+                <p className="text-muted-foreground">
+                    {pagination ? `Tổng cộng ${pagination.total} người dùng` : 'Đang tải...'}
+                </p>
+            </motion.div>
+
+            {/* Filters */}
+            <div className="flex flex-col sm:flex-row gap-3 mb-6">
+                <div className="relative flex-1">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                    <input
+                        type="text"
+                        placeholder="Tìm theo tên hoặc email…"
+                        value={search}
+                        onChange={(e) => { setSearch(e.target.value); setPage(1); }}
+                        className="w-full pl-9 pr-4 py-2.5 bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/50 text-sm"
+                    />
+                </div>
+                <select
+                    value={roleFilter}
+                    onChange={(e) => { setRoleFilter(e.target.value); setPage(1); }}
+                    className="px-4 py-2.5 bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/50 text-sm"
                 >
-                    <div className="flex items-center space-x-3 mb-2">
-                        <Shield className="w-8 h-8 text-primary" />
-                        <h1 className="text-3xl font-bold">Quản lý người dùng</h1>
-                    </div>
-                    <p className="text-muted-foreground">
-                        {pagination ? `Tổng cộng ${pagination.total} người dùng` : 'Đang tải...'}
-                    </p>
-                </motion.div>
+                    <option value="">Tất cả vai trò</option>
+                    <option value="learner">Học viên</option>
+                    <option value="instructor">Giảng viên</option>
+                    <option value="admin">Admin</option>
+                </select>
+            </div>
 
-                {/* Filters */}
-                <div className="flex flex-col sm:flex-row gap-3 mb-6">
-                    <div className="relative flex-1">
-                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                        <input
-                            type="text"
-                            placeholder="Tìm theo tên hoặc email…"
-                            value={search}
-                            onChange={(e) => { setSearch(e.target.value); setPage(1); }}
-                            className="w-full pl-9 pr-4 py-2.5 bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/50 text-sm"
-                        />
+            {/* Table */}
+            <div className="bg-card border border-border rounded-xl overflow-hidden">
+                {isLoading ? (
+                    <div className="flex items-center justify-center h-64">
+                        <Loader2 className="w-8 h-8 animate-spin text-primary" />
                     </div>
-                    <select
-                        value={roleFilter}
-                        onChange={(e) => { setRoleFilter(e.target.value); setPage(1); }}
-                        className="px-4 py-2.5 bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/50 text-sm"
-                    >
-                        <option value="">Tất cả vai trò</option>
-                        <option value="learner">Học viên</option>
-                        <option value="instructor">Giảng viên</option>
-                        <option value="admin">Admin</option>
-                    </select>
-                </div>
-
-                {/* Table */}
-                <div className="bg-card border border-border rounded-xl overflow-hidden">
-                    {isLoading ? (
-                        <div className="flex items-center justify-center h-64">
-                            <Loader2 className="w-8 h-8 animate-spin text-primary" />
-                        </div>
-                    ) : users.length === 0 ? (
-                        <div className="flex flex-col items-center justify-center h-64 text-muted-foreground">
-                            <Users className="w-12 h-12 mb-3 opacity-30" />
-                            <p>Không tìm thấy người dùng nào.</p>
-                        </div>
-                    ) : (
-                        <div className="overflow-x-auto">
-                            <table className="w-full text-sm">
-                                <thead>
-                                    <tr className="border-b border-border bg-muted/40">
-                                        <th className="text-left px-4 py-3 font-medium text-muted-foreground">Họ tên</th>
-                                        <th className="text-left px-4 py-3 font-medium text-muted-foreground">Email</th>
-                                        <th className="text-left px-4 py-3 font-medium text-muted-foreground">Vai trò</th>
-                                        <th className="text-left px-4 py-3 font-medium text-muted-foreground">Trạng thái</th>
-                                        <th className="text-right px-4 py-3 font-medium text-muted-foreground">Hành động</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {users.map((u, i) => (
-                                        <motion.tr
-                                            key={u._id}
-                                            initial={{ opacity: 0, y: 10 }}
-                                            animate={{ opacity: 1, y: 0 }}
-                                            transition={{ delay: i * 0.04 }}
-                                            className="border-b border-border/50 hover:bg-muted/30 transition-colors"
-                                        >
-                                            <td className="px-4 py-3">
-                                                <div className="flex items-center space-x-3">
-                                                    <div className="w-8 h-8 rounded-full bg-gradient-to-br from-primary to-accent flex items-center justify-center text-white text-xs font-bold flex-shrink-0">
-                                                        {u.fullName.charAt(0).toUpperCase()}
-                                                    </div>
-                                                    <span className="font-medium">{u.fullName}</span>
+                ) : users.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center h-64 text-muted-foreground">
+                        <Users className="w-12 h-12 mb-3 opacity-30" />
+                        <p>Không tìm thấy người dùng nào.</p>
+                    </div>
+                ) : (
+                    <div className="overflow-x-auto">
+                        <table className="w-full text-sm">
+                            <thead>
+                                <tr className="border-b border-border bg-muted/40">
+                                    <th className="text-left px-4 py-3 font-medium text-muted-foreground">Họ tên</th>
+                                    <th className="text-left px-4 py-3 font-medium text-muted-foreground">Email</th>
+                                    <th className="text-left px-4 py-3 font-medium text-muted-foreground">Vai trò</th>
+                                    <th className="text-left px-4 py-3 font-medium text-muted-foreground">Trạng thái</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {users.map((u, i) => (
+                                    <motion.tr
+                                        key={u._id}
+                                        initial={{ opacity: 0, y: 10 }}
+                                        animate={{ opacity: 1, y: 0 }}
+                                        transition={{ delay: i * 0.04 }}
+                                        className="border-b border-border/50 hover:bg-muted/30 transition-colors"
+                                    >
+                                        <td className="px-4 py-3">
+                                            <div className="flex items-center space-x-3">
+                                                <div className="w-8 h-8 rounded-full bg-gradient-to-br from-primary to-accent flex items-center justify-center text-white text-xs font-bold flex-shrink-0">
+                                                    {u.fullName.charAt(0).toUpperCase()}
                                                 </div>
-                                            </td>
-                                            <td className="px-4 py-3 text-muted-foreground">{u.email}</td>
-                                            <td className="px-4 py-3">
-                                                <select
-                                                    value={u.role}
-                                                    onChange={(e) => handleRoleChange(u._id, e.target.value)}
-                                                    disabled={u._id === me?._id || actionLoading === u._id + '-role'}
-                                                    className={`text-xs px-2 py-1 rounded-full border-0 font-medium focus:outline-none focus:ring-1 focus:ring-primary/50 cursor-pointer disabled:cursor-not-allowed ${roleBadge(u.role)}`}
-                                                >
-                                                    {ROLES.filter(Boolean).map((r) => (
-                                                        <option key={r} value={r}>{r}</option>
-                                                    ))}
-                                                </select>
-                                            </td>
-                                            <td className="px-4 py-3">
-                                                <button
-                                                    onClick={() => handleToggleStatus(u._id)}
-                                                    disabled={u._id === me?._id || actionLoading === u._id + '-status'}
-                                                    className="flex items-center space-x-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
-                                                >
-                                                    {actionLoading === u._id + '-status' ? (
-                                                        <Loader2 className="w-4 h-4 animate-spin" />
-                                                    ) : u.isActive ? (
-                                                        <ToggleRight className="w-5 h-5 text-green-500" />
-                                                    ) : (
-                                                        <ToggleLeft className="w-5 h-5 text-muted-foreground" />
-                                                    )}
-                                                    <span className={`text-xs ${u.isActive ? 'text-green-500' : 'text-muted-foreground'}`}>
-                                                        {u.isActive ? 'Active' : 'Inactive'}
-                                                    </span>
-                                                </button>
-                                            </td>
-                                            <td className="px-4 py-3 text-right">
-                                                <button
-                                                    onClick={() => setConfirmDelete(u)}
-                                                    disabled={u._id === me?._id || !!actionLoading}
-                                                    className="p-1.5 rounded-lg text-muted-foreground hover:text-red-500 hover:bg-red-500/10 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-                                                    title="Xóa người dùng"
-                                                >
-                                                    <Trash2 className="w-4 h-4" />
-                                                </button>
-                                            </td>
-                                        </motion.tr>
-                                    ))}
-                                </tbody>
-                            </table>
-                        </div>
-                    )}
+                                                <span className="font-medium">{u.fullName}</span>
+                                            </div>
+                                        </td>
+                                        <td className="px-4 py-3 text-muted-foreground">{u.email}</td>
+                                        <td className="px-4 py-3">
+                                            <select
+                                                value={u.role}
+                                                onChange={(e) => handleRoleChange(u._id, e.target.value)}
+                                                disabled={u._id === me?._id || actionLoading === u._id + '-role'}
+                                                className={`text-xs px-2 py-1 rounded-full border-0 font-medium focus:outline-none focus:ring-1 focus:ring-primary/50 cursor-pointer disabled:cursor-not-allowed ${roleBadge(u.role)}`}
+                                            >
+                                                {ROLES.filter(Boolean).map((r) => (
+                                                    <option key={r} value={r}>{r}</option>
+                                                ))}
+                                            </select>
+                                        </td>
+                                        <td className="px-4 py-3">
+                                            <button
+                                                onClick={() => handleToggleStatus(u._id)}
+                                                disabled={u._id === me?._id || actionLoading === u._id + '-status'}
+                                                className="flex items-center space-x-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
+                                            >
+                                                {actionLoading === u._id + '-status' ? (
+                                                    <Loader2 className="w-4 h-4 animate-spin" />
+                                                ) : u.isActive ? (
+                                                    <ToggleRight className="w-5 h-5 text-green-500" />
+                                                ) : (
+                                                    <ToggleLeft className="w-5 h-5 text-muted-foreground" />
+                                                )}
+                                                <span className={`text-xs ${u.isActive ? 'text-green-500' : 'text-muted-foreground'}`}>
+                                                    {u.isActive ? 'Active' : 'Inactive'}
+                                                </span>
+                                            </button>
+                                        </td>
+                                    </motion.tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+                )}
 
-                    {/* Pagination */}
-                    {pagination && pagination.totalPages > 1 && (
-                        <div className="flex items-center justify-between px-4 py-3 border-t border-border">
-                            <span className="text-sm text-muted-foreground">
-                                Trang {pagination.page} / {pagination.totalPages}
-                            </span>
-                            <div className="flex items-center space-x-2">
-                                <button
-                                    onClick={() => setPage((p) => p - 1)}
-                                    disabled={!pagination.hasPrevPage}
-                                    className="p-1.5 rounded-lg border border-border hover:bg-muted disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-                                >
-                                    <ChevronLeft className="w-4 h-4" />
-                                </button>
-                                <button
-                                    onClick={() => setPage((p) => p + 1)}
-                                    disabled={!pagination.hasNextPage}
-                                    className="p-1.5 rounded-lg border border-border hover:bg-muted disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-                                >
-                                    <ChevronRight className="w-4 h-4" />
-                                </button>
-                            </div>
+                {/* Pagination */}
+                {pagination && pagination.totalPages > 1 && (
+                    <div className="flex items-center justify-between px-4 py-3 border-t border-border">
+                        <span className="text-sm text-muted-foreground">
+                            Trang {pagination.page} / {pagination.totalPages}
+                        </span>
+                        <div className="flex items-center space-x-2">
+                            <button
+                                onClick={() => setPage((p) => p - 1)}
+                                disabled={!pagination.hasPrevPage}
+                                className="p-1.5 rounded-lg border border-border hover:bg-muted disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                            >
+                                <ChevronLeft className="w-4 h-4" />
+                            </button>
+                            <button
+                                onClick={() => setPage((p) => p + 1)}
+                                disabled={!pagination.hasNextPage}
+                                className="p-1.5 rounded-lg border border-border hover:bg-muted disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                            >
+                                <ChevronRight className="w-4 h-4" />
+                            </button>
                         </div>
-                    )}
-                </div>
-
-                {/* Delete Confirmation Dialog */}
-                {confirmDelete && (
-                    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-                        <motion.div
-                            initial={{ opacity: 0, scale: 0.9 }}
-                            animate={{ opacity: 1, scale: 1 }}
-                            className="bg-card border border-border rounded-xl p-6 max-w-sm w-full shadow-2xl"
-                        >
-                            <div className="flex items-center space-x-3 mb-4">
-                                <div className="w-10 h-10 rounded-full bg-red-500/10 flex items-center justify-center">
-                                    <AlertTriangle className="w-5 h-5 text-red-500" />
-                                </div>
-                                <h3 className="text-lg font-bold">Xác nhận xóa</h3>
-                            </div>
-                            <p className="text-muted-foreground mb-6">
-                                Bạn có chắc chắn muốn xóa <strong>{confirmDelete.fullName}</strong>? Hành động này không thể hoàn tác.
-                            </p>
-                            <div className="flex space-x-3">
-                                <button
-                                    onClick={() => setConfirmDelete(null)}
-                                    className="flex-1 py-2.5 border border-border rounded-lg hover:bg-muted transition-colors text-sm"
-                                >
-                                    Hủy
-                                </button>
-                                <button
-                                    onClick={() => handleDelete(confirmDelete._id)}
-                                    disabled={actionLoading === confirmDelete._id + '-delete'}
-                                    className="flex-1 py-2.5 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors text-sm flex items-center justify-center space-x-2 disabled:opacity-60"
-                                >
-                                    {actionLoading === confirmDelete._id + '-delete' ? (
-                                        <Loader2 className="w-4 h-4 animate-spin" />
-                                    ) : (
-                                        <span>Xóa</span>
-                                    )}
-                                </button>
-                            </div>
-                        </motion.div>
                     </div>
                 )}
             </div>
+
         </div>
     );
 }

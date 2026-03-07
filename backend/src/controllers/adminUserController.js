@@ -132,38 +132,14 @@ const toggleUserStatus = async (req, res, next) => {
         next(error);
     }
 };
-// DELETE /api/admin/users/:id
-const deleteUser = async (req, res, next) => {
-    try {
-        const { id } = req.params;
-
-        // Prevent admin from deleting themselves
-        if (id === req.user._id.toString()) {
-            return res.status(400).json({
-                success: false,
-                message: 'You cannot delete your own account.',
-            });
-        }
-
-        const deletedUser = await User.findByIdAndDelete(id);
-        if (!deletedUser) {
-            return res.status(404).json({ success: false, message: 'User not found.' });
-        }
-
-        return res.status(200).json({
-            success: true,
-            message: 'User deleted successfully.',
-            data: {
-                user: {
-                    _id: deletedUser._id,
-                    email: deletedUser.email,
-                    fullName: deletedUser.fullName,
-                },
-            },
-        });
-    } catch (error) {
-        next(error);
-    }
+// DELETE /api/admin/users/:id — DISABLED by policy
+// Admins are not permitted to permanently delete users.
+// Use toggleUserStatus to deactivate accounts instead.
+const deleteUser = async (req, res) => {
+    return res.status(403).json({
+        success: false,
+        message: 'Deleting users is not permitted. Use deactivate (toggle status) instead.',
+    });
 };
 
-module.exports = { listUsers, updateUserRole, toggleUserStatus, deleteUser };
+module.exports = { listUsers, updateUserRole, toggleUserStatus };
