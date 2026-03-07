@@ -5,7 +5,6 @@ const {
     listUsers,
     updateUserRole,
     toggleUserStatus,
-    deleteUser,
 } = require('../controllers/adminUserController');
 const auth = require('../middleware/auth');
 const { isAdmin } = require('../middleware/roleCheck');
@@ -28,9 +27,5 @@ router.put('/users/:id/role', updateUserRole);
 // @access  Admin
 router.put('/users/:id/status', toggleUserStatus);
 
-// @route   DELETE /api/admin/users/:id
-// @desc    Delete a user
-// @access  Admin
-router.delete('/users/:id', deleteUser);
 
 module.exports = router;

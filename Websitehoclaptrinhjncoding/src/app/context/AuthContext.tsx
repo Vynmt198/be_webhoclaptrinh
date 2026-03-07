@@ -17,6 +17,7 @@ interface AuthContextValue {
     isLoading: boolean;
     login: (email: string, password: string) => Promise<void>;
     register: (fullName: string, email: string, password: string) => Promise<void>;
+    loginWithToken: (token: string, user: User) => void;
     logout: () => void;
     updateUser: (updated: Partial<User>) => void;
     refreshProfile: () => Promise<void>;
@@ -65,6 +66,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         []
     );
 
+    const loginWithToken = useCallback((token: string, user: User) => {
+        localStorage.setItem('token', token);
+        setToken(token);
+        setUser(user);
+    }, []);
+
     const logout = useCallback(() => {
         authApi.logout().catch(() => { }); // fire-and-forget
         localStorage.removeItem('token');
@@ -90,6 +97,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 isLoading,
                 login,
                 register,
+                loginWithToken,
                 logout,
                 updateUser,
                 refreshProfile,
