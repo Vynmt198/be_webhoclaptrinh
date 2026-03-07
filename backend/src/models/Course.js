@@ -63,6 +63,7 @@ const courseSchema = new mongoose.Schema(
 
 courseSchema.index({ status: 1 });
 courseSchema.index({ instructorId: 1 });
+courseSchema.index({ title: 'text', description: 'text', syllabus: 'text' });
 courseSchema.index({ categoryId: 1 });
 courseSchema.index({ level: 1 });
 courseSchema.index({ price: 1 });
