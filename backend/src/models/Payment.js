@@ -1,9 +1,5 @@
 const mongoose = require('mongoose');
 
-/**
- * Payment - UC11 Purchase Course, BR11-BR12, BR32
- * Liên kết với enrollment qua courseId để xử lý UC10
- */
 const paymentSchema = new mongoose.Schema(
     {
         userId: {
@@ -29,6 +25,7 @@ const paymentSchema = new mongoose.Schema(
         amount: {
             type: Number,
             required: true,
+            min: 0,
         },
         orderInfo: {
             type: String,
@@ -62,5 +59,6 @@ const paymentSchema = new mongoose.Schema(
 paymentSchema.index({ userId: 1, createdAt: -1 });
 paymentSchema.index({ orderId: 1 });
 paymentSchema.index({ courseId: 1 });
+paymentSchema.index({ paymentStatus: 1 });
 
 module.exports = mongoose.model('Payment', paymentSchema);
