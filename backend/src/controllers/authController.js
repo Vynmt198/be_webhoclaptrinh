@@ -178,20 +178,9 @@ const googleCallback = async (req, res, next) => {
 
         await User.findByIdAndUpdate(user._id, { lastLogin: new Date() });
 
-        return res.status(200).json({
-            success: true,
-            message: 'Google login successful.',
-            data: {
-                token,
-                user: {
-                    _id: user._id,
-                    email: user.email,
-                    fullName: user.fullName,
-                    role: user.role,
-                    avatar: user.avatar,
-                },
-            },
-        });
+        // Redirect to frontend with token in query string
+        const clientUrl = process.env.CLIENT_URL || 'http://localhost:5173';
+        return res.redirect(`${clientUrl}/auth/callback?token=${token}`);
     } catch (error) {
         next(error);
     }
