@@ -1,51 +1,45 @@
 const Payment = require('../models/Payment');
+const Enrollment = require('../models/Enrollment');
+const Course = require('../models/Course');
 const vnpayService = require('../services/vnpayService');
-const vnpayBanks = require('../utils/vnpayBanks');
-
-exports.getBankList = async (req, res, next) => {
-    try {
-        res.status(200).json({
-            success: true,
-            data: vnpayBanks,
-        });
-    } catch (error) {
-        next(error);
-    }
-};
 
 exports.createPayment = async (req, res, next) => {
     try {
-        const { amount, orderInfo, bankCode } = req.body;
+        const { amount, courseId } = req.body;
         const userId = req.user._id;
 
-        if (!amount || amount <= 0) {
-            return res.status(400).json({
-                success: false,
-                message: 'Invalid amount',
-            });
-        }
-
         const orderId = `${Date.now()}_${userId}`;
-        const ipAddr = req.headers['x-forwarded-for'] || 
-                       req.connection.remoteAddress || 
-                       req.socket.remoteAddress || 
-                       '127.0.0.1';
+        const ipAddr = req.headers['x-forwarded-for'] ||
+            req.connection.remoteAddress ||
+            req.socket.remoteAddress ||
+            '127.0.0.1';
+
+        console.log('Creating payment with IP:', ipAddr);
+
+        let orderInfo = 'Thanh toán';
+        if (courseId) {
+            const course = await Course.findById(courseId);
+            if (course) {
+                orderInfo = `Thanh toan khoa hoc: ${course.title}`;
+            }
+        }
 
         const payment = await Payment.create({
             userId,
             orderId,
             amount,
-            orderInfo: orderInfo || 'Payment for course',
-            bankCode: bankCode || null,
+            orderInfo,
+            courseId: courseId || null,
         });
 
         const paymentUrl = vnpayService.createPaymentUrl(
             orderId,
             amount,
-            orderInfo || 'Payment for course',
-            ipAddr,
-            bankCode
+            orderInfo,
+            ipAddr
         );
+
+        console.log('Payment URL created:', paymentUrl);
 
         res.status(200).json({
             success: true,
@@ -92,6 +86,15 @@ exports.vnpayReturn = async (req, res, next) => {
 
         if (responseCode === '00') {
             payment.paymentStatus = 'success';
+
+            if (payment.courseId) {
+                const enrollment = await Enrollment.findOneAndUpdate(
+                    { userId: payment.userId, courseId: payment.courseId },
+                    { status: 'active' },
+                    { upsert: true, new: true }
+                );
+                payment.enrollmentId = enrollment._id;
+            }
         } else {
             payment.paymentStatus = 'failed';
         }
@@ -146,6 +149,16 @@ exports.vnpayIPN = async (req, res, next) => {
             payment.bankCode = vnp_Params.vnp_BankCode;
             payment.cardType = vnp_Params.vnp_CardType;
             payment.vnpayData = vnp_Params;
+
+            if (payment.courseId) {
+                const enrollment = await Enrollment.findOneAndUpdate(
+                    { userId: payment.userId, courseId: payment.courseId },
+                    { status: 'active' },
+                    { upsert: true, new: true }
+                );
+                payment.enrollmentId = enrollment._id;
+            }
+
             await payment.save();
 
             return res.status(200).json({ RspCode: '00', Message: 'Success' });
@@ -184,7 +197,7 @@ exports.getPaymentHistory = async (req, res, next) => {
             data: {
                 payments,
                 totalPages: Math.ceil(count / limit),
-                currentPage: page,
+                currentPage: parseInt(page),
                 total: count,
             },
         });
@@ -215,7 +228,6 @@ exports.getPaymentDetail = async (req, res, next) => {
         next(error);
     }
 };
-
 
 exports.getPaymentStats = async (req, res, next) => {
     try {
