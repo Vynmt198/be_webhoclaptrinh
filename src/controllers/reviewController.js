@@ -267,31 +267,10 @@ const syncCourseRating = async (courseId) => {
     }
 };
 
-/**
- * GET /api/reviews/course-rating/:courseId
- * Get rating summary for a course (average, distribution)
- * @access Public
- */
-const getCourseRatingSummary = async (req, res, next) => {
-    try {
-        const { courseId } = req.params;
-
-        const ratingSummary = await calculateCourseRatingStats(courseId);
-
-        return res.status(200).json({
-            success: true,
-            data: { rating: ratingSummary },
-        });
-    } catch (error) {
-        next(error);
-    }
-};
-
 module.exports = {
     getCourseReviews,
     getUserReviewForCourse,
     createReview,
     updateReview,
     deleteReview,
-    getCourseRatingSummary,
 };
