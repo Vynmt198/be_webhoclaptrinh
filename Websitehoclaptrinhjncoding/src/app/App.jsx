@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { Toaster } from 'sonner';
 import { CartProvider } from '@/app/context/CartContext';
 import { AuthProvider } from '@/app/context/AuthContext';
@@ -13,6 +13,7 @@ import { Login } from '@/app/pages/Login';
 import { Register } from '@/app/pages/Register';
 import { ForgotPassword } from '@/app/pages/ForgotPassword';
 import { ResetPassword } from '@/app/pages/ResetPassword';
+import { AuthCallback } from '@/app/pages/AuthCallback';
 import { Cart } from '@/app/pages/Cart';
 import { Checkout } from '@/app/pages/Checkout';
 import { OrderSuccess } from '@/app/pages/OrderSuccess';
@@ -21,8 +22,11 @@ import { Contact } from '@/app/pages/Contact';
 import { FAQ } from '@/app/pages/FAQ';
 import { Terms } from '@/app/pages/Terms';
 import { NotFound } from '@/app/pages/NotFound';
+import { AdminLayout } from '@/app/pages/admin/AdminLayout';
 import { AdminUsers } from '@/app/pages/admin/AdminUsers';
-
+import { AdminCourses } from '@/app/pages/admin/AdminCourses';
+import { AdminContent } from '@/app/pages/admin/AdminContent';
+import { AdminAnalytics } from '@/app/pages/admin/AdminAnalytics';
 export default function App() {
   return (
     <BrowserRouter>
@@ -40,10 +44,17 @@ export default function App() {
               <Route path="cart" element={<Cart />} />
               <Route path="checkout" element={<Checkout />} />
               <Route path="about" element={<About />} />
-              <Route path="contact" element={<Contact />} />
               <Route path="faq" element={<FAQ />} />
               <Route path="terms" element={<Terms />} />
-              <Route path="admin/users" element={<AdminUsers />} />
+
+              {/* Admin Routes (Wrapped in Layout + AdminLayout) */}
+              <Route path="admin" element={<AdminLayout />}>
+                <Route index element={<Navigate to="analytics" replace />} />
+                <Route path="analytics" element={<AdminAnalytics />} />
+                <Route path="users" element={<AdminUsers />} />
+                <Route path="courses" element={<AdminCourses />} />
+                <Route path="content" element={<AdminContent />} />
+              </Route>
             </Route>
 
             {/* Auth Routes (No Layout) */}
@@ -51,6 +62,7 @@ export default function App() {
             <Route path="register" element={<Register />} />
             <Route path="forgot-password" element={<ForgotPassword />} />
             <Route path="reset-password" element={<ResetPassword />} />
+            <Route path="auth/callback" element={<AuthCallback />} />
 
             {/* Learning Route (No Layout) */}
             <Route path="learn/:id" element={<Learn />} />

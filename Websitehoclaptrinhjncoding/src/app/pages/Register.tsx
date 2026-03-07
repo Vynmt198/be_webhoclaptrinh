@@ -1,9 +1,18 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { motion } from 'motion/react';
-import { Mail, Lock, Eye, EyeOff, Code2, User, ArrowRight, Loader2 } from 'lucide-react';
+import { Mail, Lock, Eye, EyeOff, Code2, User, ArrowRight, Loader2, CheckCircle2, XCircle } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAuth } from '@/app/context/AuthContext';
+
+function getPasswordStrength(password: string) {
+  return {
+    minLength: password.length >= 8,
+    hasUppercase: /[A-Z]/.test(password),
+    hasLowercase: /[a-z]/.test(password),
+    hasNumber: /[0-9]/.test(password),
+  };
+}
 
 export function Register() {
   const navigate = useNavigate();
@@ -19,8 +28,15 @@ export function Register() {
     agreeToTerms: false
   });
 
+  const pwStrength = getPasswordStrength(formData.password);
+  const isPasswordValid = Object.values(pwStrength).every(Boolean);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!isPasswordValid) {
+      toast.error('Mật khẩu chưa đáp ứng yêu cầu!');
+      return;
+    }
     if (formData.password !== formData.confirmPassword) {
       toast.error('Mật khẩu không khớp!');
       return;
@@ -188,7 +204,22 @@ export function Register() {
                   {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
                 </button>
               </div>
-              <p className="mt-1 text-xs text-muted-foreground">Tối thiểu 8 ký tự</p>
+              {/* Password requirements checklist */}
+              {formData.password.length > 0 && (
+                <ul className="mt-2 space-y-1">
+                  {([
+                    [pwStrength.minLength, 'Tối thiểu 8 ký tự'],
+                    [pwStrength.hasUppercase, 'Ít nhất 1 chữ HOA (A-Z)'],
+                    [pwStrength.hasLowercase, 'Ít nhất 1 chữ thường (a-z)'],
+                    [pwStrength.hasNumber, 'Ít nhất 1 chữ số (0-9)'],
+                  ] as [boolean, string][]).map(([ok, label]) => (
+                    <li key={label} className={`flex items-center gap-1.5 text-xs ${ok ? 'text-green-500' : 'text-muted-foreground'}`}>
+                      {ok ? <CheckCircle2 className="w-3.5 h-3.5" /> : <XCircle className="w-3.5 h-3.5" />}
+                      {label}
+                    </li>
+                  ))}
+                </ul>
+              )}
             </div>
 
             {/* Confirm Password */}

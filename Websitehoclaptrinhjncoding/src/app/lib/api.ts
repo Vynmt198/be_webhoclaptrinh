@@ -66,6 +66,9 @@ export const userApi = {
     getProfile: () =>
         request<{ success: boolean; data: { user: User } }>('/users/profile'),
 
+    getProfileWithToken: (token: string) =>
+        request<{ success: boolean; data: { user: User } }>('/users/profile', { token }),
+
     updateProfile: (payload: { fullName?: string; avatar?: string }) =>
         request<{ success: boolean; data: { user: User } }>('/users/profile', {
             method: 'PUT',
@@ -105,9 +108,6 @@ export const adminApi = {
 
     toggleStatus: (id: string) =>
         request(`/admin/users/${id}/status`, { method: 'PUT' }),
-
-    deleteUser: (id: string) =>
-        request(`/admin/users/${id}`, { method: 'DELETE' }),
 };
 
 // ─── Shared Types ──────────────────────────────────────────────────────────

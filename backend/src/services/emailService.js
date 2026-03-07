@@ -1,16 +1,31 @@
 const nodemailer = require('nodemailer');
 
-// Create reusable transporter
-const createTransporter = () => {
+// Create transporter — uses real SMTP if EMAIL_USER is set, otherwise falls back to Ethereal (dev)
+const createTransporter = async () => {
+  if (process.env.EMAIL_USER && process.env.EMAIL_PASS) {
     return nodemailer.createTransport({
-        host: process.env.EMAIL_HOST,
-        port: parseInt(process.env.EMAIL_PORT, 10),
-        secure: process.env.EMAIL_PORT === '465', // true for 465, false for 587
-        auth: {
-            user: process.env.EMAIL_USER,
-            pass: process.env.EMAIL_PASS,
-        },
+      host: process.env.EMAIL_HOST || 'smtp.gmail.com',
+      port: parseInt(process.env.EMAIL_PORT, 10) || 587,
+      secure: process.env.EMAIL_PORT === '465',
+      auth: {
+        user: process.env.EMAIL_USER,
+        pass: process.env.EMAIL_PASS,
+      },
     });
+  }
+
+  // Dev fallback: Ethereal fake SMTP (emails viewable at ethereal.email)
+  console.warn('[Email] No EMAIL_USER set — using Ethereal test account');
+  const testAccount = await nodemailer.createTestAccount();
+  return nodemailer.createTransport({
+    host: 'smtp.ethereal.email',
+    port: 587,
+    secure: false,
+    auth: {
+      user: testAccount.user,
+      pass: testAccount.pass,
+    },
+  });
 };
 
 /**
@@ -20,10 +35,10 @@ const createTransporter = () => {
  * @param {String} resetToken - Plain text reset token (to be included in URL)
  */
 const sendPasswordResetEmail = async (to, fullName, resetToken) => {
-    const transporter = createTransporter();
-    const resetUrl = `${process.env.CLIENT_URL}/api/auth/reset-password?token=${resetToken}`;
+  const transporter = await createTransporter();
+  const resetUrl = `${process.env.CLIENT_URL}/reset-password?token=${resetToken}`;
 
-    const html = `
+  const html = `
     <!DOCTYPE html>
     <html>
     <head>
@@ -62,12 +77,14 @@ const sendPasswordResetEmail = async (to, fullName, resetToken) => {
     </html>
   `;
 
-    await transporter.sendMail({
-        from: process.env.EMAIL_FROM,
-        to,
-        subject: '[OPLW] Password Reset Request',
-        html,
-    });
+  const info = await transporter.sendMail({
+    from: process.env.EMAIL_FROM || '"Jncoding" <noreply@jncoding.dev>',
+    to,
+    subject: '[OPLW] Password Reset Request',
+    html,
+  });
+  const previewUrl = nodemailer.getTestMessageUrl(info);
+  if (previewUrl) console.log(`[Email] 📧 Preview reset email: ${previewUrl}`);
 };
 
 /**
@@ -76,9 +93,9 @@ const sendPasswordResetEmail = async (to, fullName, resetToken) => {
  * @param {String} fullName - Recipient's name
  */
 const sendWelcomeEmail = async (to, fullName) => {
-    const transporter = createTransporter();
+  const transporter = await createTransporter();
 
-    const html = `
+  const html = `
     <!DOCTYPE html>
     <html>
     <head>
@@ -118,12 +135,14 @@ const sendWelcomeEmail = async (to, fullName) => {
     </html>
   `;
 
-    await transporter.sendMail({
-        from: process.env.EMAIL_FROM,
-        to,
-        subject: '[OPLW] Welcome! Your account is ready',
-        html,
-    });
+  const info = await transporter.sendMail({
+    from: process.env.EMAIL_FROM || '"Jncoding" <noreply@jncoding.dev>',
+    to,
+    subject: '[OPLW] Welcome! Your account is ready',
+    html,
+  });
+  const previewUrl = nodemailer.getTestMessageUrl(info);
+  if (previewUrl) console.log(`[Email] 📧 Preview welcome email: ${previewUrl}`);
 };
 
 module.exports = { sendPasswordResetEmail, sendWelcomeEmail };

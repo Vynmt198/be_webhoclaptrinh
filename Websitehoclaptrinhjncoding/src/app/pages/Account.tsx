@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { motion } from 'motion/react';
-import { User, Lock, BookOpen, Award, Settings, Bell, Loader2 } from 'lucide-react';
+import { User, Lock, BookOpen, Award, Settings, Bell, Loader2, Eye, EyeOff } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAuth } from '@/app/context/AuthContext';
 import { userApi } from '@/app/lib/api';
@@ -22,6 +22,8 @@ export function Account() {
     confirmPassword: '',
   });
   const [isSavingPassword, setIsSavingPassword] = useState(false);
+  const [showPw, setShowPw] = useState({ current: false, newPw: false, confirm: false });
+  const togglePw = (field: keyof typeof showPw) => setShowPw((p) => ({ ...p, [field]: !p[field] }));
 
   const tabs = [
     { id: 'profile', label: 'Hồ sơ', icon: User },
@@ -183,40 +185,55 @@ export function Account() {
                     <h2 className="text-xl font-bold">Đổi mật khẩu</h2>
                     <div>
                       <label className="block text-sm font-medium mb-2">Mật khẩu hiện tại</label>
-                      <input
-                        type="password"
-                        value={passwordForm.currentPassword}
-                        onChange={(e) => setPasswordForm((p) => ({ ...p, currentPassword: e.target.value }))}
-                        placeholder="••••••••"
-                        className="w-full px-4 py-3 bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/50"
-                        required
-                        disabled={isSavingPassword}
-                      />
+                      <div className="relative">
+                        <input
+                          type={showPw.current ? 'text' : 'password'}
+                          value={passwordForm.currentPassword}
+                          onChange={(e) => setPasswordForm((p) => ({ ...p, currentPassword: e.target.value }))}
+                          placeholder="••••••••"
+                          className="w-full px-4 py-3 pr-11 bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/50"
+                          required
+                          disabled={isSavingPassword}
+                        />
+                        <button type="button" onClick={() => togglePw('current')} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors">
+                          {showPw.current ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                        </button>
+                      </div>
                     </div>
                     <div>
                       <label className="block text-sm font-medium mb-2">Mật khẩu mới</label>
-                      <input
-                        type="password"
-                        value={passwordForm.newPassword}
-                        onChange={(e) => setPasswordForm((p) => ({ ...p, newPassword: e.target.value }))}
-                        placeholder="••••••••"
-                        className="w-full px-4 py-3 bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/50"
-                        required
-                        minLength={8}
-                        disabled={isSavingPassword}
-                      />
+                      <div className="relative">
+                        <input
+                          type={showPw.newPw ? 'text' : 'password'}
+                          value={passwordForm.newPassword}
+                          onChange={(e) => setPasswordForm((p) => ({ ...p, newPassword: e.target.value }))}
+                          placeholder="••••••••"
+                          className="w-full px-4 py-3 pr-11 bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/50"
+                          required
+                          minLength={8}
+                          disabled={isSavingPassword}
+                        />
+                        <button type="button" onClick={() => togglePw('newPw')} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors">
+                          {showPw.newPw ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                        </button>
+                      </div>
                     </div>
                     <div>
                       <label className="block text-sm font-medium mb-2">Xác nhận mật khẩu mới</label>
-                      <input
-                        type="password"
-                        value={passwordForm.confirmPassword}
-                        onChange={(e) => setPasswordForm((p) => ({ ...p, confirmPassword: e.target.value }))}
-                        placeholder="••••••••"
-                        className="w-full px-4 py-3 bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/50"
-                        required
-                        disabled={isSavingPassword}
-                      />
+                      <div className="relative">
+                        <input
+                          type={showPw.confirm ? 'text' : 'password'}
+                          value={passwordForm.confirmPassword}
+                          onChange={(e) => setPasswordForm((p) => ({ ...p, confirmPassword: e.target.value }))}
+                          placeholder="••••••••"
+                          className="w-full px-4 py-3 pr-11 bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/50"
+                          required
+                          disabled={isSavingPassword}
+                        />
+                        <button type="button" onClick={() => togglePw('confirm')} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors">
+                          {showPw.confirm ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                        </button>
+                      </div>
                     </div>
                     <button
                       type="submit"

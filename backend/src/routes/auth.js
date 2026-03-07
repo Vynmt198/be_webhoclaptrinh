@@ -62,7 +62,7 @@ router.get(
 // @access  Public
 router.get(
     '/google/callback',
-    passport.authenticate('google', { session: false, failureRedirect: '/api/auth/google/failed' }),
+    passport.authenticate('google', { session: false, failureRedirect: `${process.env.CLIENT_URL || 'http://localhost:5173'}/login?error=google_failed` }),
     googleCallback
 );
 
