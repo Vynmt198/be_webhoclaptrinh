@@ -15,15 +15,14 @@ const userRoutes = require('./routes/users');
 const adminRoutes = require('./routes/admin');
 const paymentRoutes = require('./routes/payment');
 const reviewRoutes = require('./routes/reviews');
-const coursesLearningRoutes = require('./routes/coursesLearning');
-const lessonsLearningRoutes = require('./routes/lessonsLearning');
+const coursesRoutes = require('./routes/courses');
+const lessonsRoutes = require('./routes/lessons');
+const categoriesRoutes = require('./routes/categories');
 const progressRoutes = require('./routes/progress');
 const quizzesRoutes = require('./routes/quizzes');
 const instructorRoutes = require('./routes/instructor');
 const certificateRoutes = require('./routes/certificates');
 const discussionRoutes = require('./routes/discussions');
-const { getCourseReviews } = require('./controllers/reviewController');
-
 const app = express();
 
 connectDB();
@@ -52,14 +51,14 @@ app.use('/api/users', userRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/payment', paymentRoutes);
 app.use('/api/reviews', reviewRoutes);
-app.use('/api/courses', coursesLearningRoutes);
-app.use('/api/lessons', lessonsLearningRoutes);
+app.use('/api/courses', coursesRoutes);
+app.use('/api/lessons', lessonsRoutes);
+app.use('/api/categories', categoriesRoutes);
 app.use('/api/progress', progressRoutes);
 app.use('/api/quizzes', quizzesRoutes);
 app.use('/api/instructor', instructorRoutes);
 app.use('/api/certificates', certificateRoutes);
 app.use('/api/discussions', discussionRoutes);
-app.get('/api/courses/:id/reviews', getCourseReviews);
 
 app.get('/api/health', (req, res) => {
     res.status(200).json({
