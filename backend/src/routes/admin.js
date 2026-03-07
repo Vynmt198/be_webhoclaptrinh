@@ -6,6 +6,11 @@ const {
     updateUserRole,
     toggleUserStatus,
 } = require('../controllers/adminUserController');
+const {
+    approveCourse,
+    updateCourseStatus,
+    listPendingCourses,
+} = require('../controllers/adminCourseController');
 const auth = require('../middleware/auth');
 const { isAdmin } = require('../middleware/roleCheck');
 
@@ -27,5 +32,8 @@ router.put('/users/:id/role', updateUserRole);
 // @access  Admin
 router.put('/users/:id/status', toggleUserStatus);
 
+router.get('/courses', listPendingCourses);
+router.put('/courses/:id/approve', approveCourse);
+router.put('/courses/:id/status', updateCourseStatus);
 
 module.exports = router;

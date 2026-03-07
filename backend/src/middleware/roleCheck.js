@@ -115,6 +115,65 @@ const isReviewOwner = async (req, res, next) => {
     }
 };
 
+/**
+ * Check if user is owner of course (instructor) or admin
+ */
+const isCourseOwner = (idParam = 'id') => {
+    return async (req, res, next) => {
+        try {
+            const Course = require('../models/Course');
+            const courseId = req.params[idParam];
+            const course = await Course.findById(courseId);
+            if (!course) {
+                return res.status(404).json({ success: false, message: 'Course not found.' });
+            }
+            const isOwner = course.instructorId.toString() === req.user._id.toString();
+            const isAdminUser = req.user.role === 'admin';
+            if (!isOwner && !isAdminUser) {
+                return res.status(403).json({
+                    success: false,
+                    message: 'Access denied. You can only manage your own courses.',
+                });
+            }
+            req.course = course;
+            next();
+        } catch (error) {
+            next(error);
+        }
+    };
+};
+
+/**
+ * Check if user is owner of the lesson's course
+ */
+const isLessonOwner = async (req, res, next) => {
+    try {
+        const Lesson = require('../models/Lesson');
+        const Course = require('../models/Course');
+        const lesson = await Lesson.findById(req.params.id);
+        if (!lesson) {
+            return res.status(404).json({ success: false, message: 'Lesson not found.' });
+        }
+        const course = await Course.findById(lesson.courseId);
+        if (!course) {
+            return res.status(404).json({ success: false, message: 'Course not found.' });
+        }
+        const isOwner = course.instructorId.toString() === req.user._id.toString();
+        const isAdminUser = req.user.role === 'admin';
+        if (!isOwner && !isAdminUser) {
+            return res.status(403).json({
+                success: false,
+                message: 'Access denied. You can only manage lessons in your own courses.',
+            });
+        }
+        req.lesson = lesson;
+        req.course = course;
+        next();
+    } catch (error) {
+        next(error);
+    }
+};
+
 const isReviewOwnerOrAdmin = async (req, res, next) => {
     try {
         const Review = require('../models/Review');
@@ -144,4 +203,13 @@ const isReviewOwnerOrAdmin = async (req, res, next) => {
     }
 };
 
-module.exports = { isAdmin, isInstructor, requireRole, isEnrolled, isReviewOwner, isReviewOwnerOrAdmin };
+module.exports = {
+    isAdmin,
+    isInstructor,
+    requireRole,
+    isEnrolled,
+    isCourseOwner,
+    isLessonOwner,
+    isReviewOwner,
+    isReviewOwnerOrAdmin,
+};
