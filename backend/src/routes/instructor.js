@@ -1,10 +1,18 @@
 const express = require('express');
 const router = express.Router();
 const instructorController = require('../controllers/instructorController');
+const instructorQuizController = require('../controllers/instructorQuizController');
 const auth = require('../middleware/auth');
 const roleCheck = require('../middleware/roleCheck');
 
-// Only instructor or admin can access instructor analytics
-router.get('/courses/:id/analytics', auth, roleCheck.requireRole('instructor', 'admin'), instructorController.getCourseAnalytics);
+// All routes require auth + instructor or admin
+router.use(auth, roleCheck.requireRole('instructor', 'admin'));
+
+router.get('/courses', instructorController.listMyCourses);
+router.get('/courses/:id/analytics', instructorController.getCourseAnalytics);
+
+router.get('/lessons/:lessonId/quiz', roleCheck.isLessonOwnerParam('lessonId'), instructorQuizController.getQuizByLesson);
+router.post('/lessons/:lessonId/quiz', roleCheck.isLessonOwnerParam('lessonId'), instructorQuizController.createOrUpdateQuiz);
+router.put('/quizzes/:quizId', roleCheck.isQuizOwner('quizId'), instructorQuizController.updateQuiz);
 
 module.exports = router;

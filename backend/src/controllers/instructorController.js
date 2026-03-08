@@ -4,6 +4,39 @@ const Progress = require('../models/Progress');
 const mongoose = require('mongoose');
 
 /**
+ * @route GET /api/instructor/courses
+ * @desc List courses of the current instructor
+ */
+exports.listMyCourses = async (req, res, next) => {
+    try {
+        const { page = 1, limit = 20, status } = req.query;
+        const pageNum = Math.max(1, parseInt(page, 10));
+        const limitNum = Math.min(50, Math.max(1, parseInt(limit, 10)));
+        const skip = (pageNum - 1) * limitNum;
+        const filter = { instructorId: req.user._id };
+        if (status) filter.status = status;
+        const [courses, total] = await Promise.all([
+            Course.find(filter)
+                .populate('categoryId', 'name slug')
+                .sort({ updatedAt: -1 })
+                .skip(skip)
+                .limit(limitNum)
+                .lean(),
+            Course.countDocuments(filter),
+        ]);
+        return res.status(200).json({
+            success: true,
+            data: {
+                courses,
+                pagination: { total, page: pageNum, limit: limitNum, totalPages: Math.ceil(total / limitNum) },
+            },
+        });
+    } catch (error) {
+        next(error);
+    }
+};
+
+/**
  * @route GET /api/instructor/courses/:id/analytics
  * @desc Get course analytics for instructor (BR19 - instructors manage own courses)
  */

@@ -5,14 +5,15 @@ const lessonController = require('../controllers/lessonController');
 const learningController = require('../controllers/learningController');
 const { getCourseReviews } = require('../controllers/reviewController');
 const auth = require('../middleware/auth');
+const optionalAuth = require('../middleware/optionalAuth');
 const { isCourseOwner, isInstructor } = require('../middleware/roleCheck');
 const isEnrolled = require('../middleware/isEnrolled');
 
 router.get('/', courseController.listCourses);
 router.get('/search', courseController.searchCourses);
 router.get('/autocomplete', courseController.autocomplete);
-router.get('/:id', courseController.getCourseById);
-router.get('/:id/curriculum', courseController.getCurriculum);
+router.get('/:id', optionalAuth, courseController.getCourseById);
+router.get('/:id/curriculum', optionalAuth, courseController.getCurriculum);
 router.get('/:id/reviews', getCourseReviews);
 router.get('/:id/learn', auth, isEnrolled, learningController.getCourseLearningData);
 router.post('/', auth, isInstructor, courseController.createCourse);
