@@ -1,5 +1,5 @@
 import { Link, Outlet, useLocation, useNavigate } from "react-router-dom";
-import { Code2, User, LogIn, LogOut, Menu, X, ShoppingCart, Award, Shield } from "lucide-react";
+import { Code2, User, LogIn, LogOut, Menu, X, ShoppingCart, Award, Shield, GraduationCap } from "lucide-react";
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "sonner";
@@ -129,6 +129,15 @@ export function Layout() {
                       <span>Admin</span>
                     </Link>
                   )}
+                  {user?.role === 'instructor' && (
+                    <Link
+                      to="/instructor/courses"
+                      className="px-3 py-2 text-sm border border-border rounded-lg hover:bg-muted transition-colors flex items-center space-x-1.5 text-muted-foreground"
+                    >
+                      <GraduationCap className="w-4 h-4" />
+                      <span>Kênh giảng viên</span>
+                    </Link>
+                  )}
                   <Link
                     to="/account"
                     className="px-4 py-2 text-sm bg-gradient-to-r from-blue-600 via-purple-600 to-blue-700 text-white rounded-lg hover:shadow-lg hover:shadow-primary/25 transition-all flex items-center space-x-2"
@@ -211,10 +220,26 @@ export function Layout() {
                     </motion.div>
                   ))}
 
+                  {user?.role === 'instructor' && (
+                    <motion.div
+                      initial={{ opacity: 0, x: -20 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      transition={{ delay: navLinks.length * 0.06 }}
+                    >
+                      <Link
+                        to="/instructor/courses"
+                        onClick={() => setMobileMenuOpen(false)}
+                        className="block px-4 py-3 rounded-lg text-muted-foreground hover:bg-muted transition-colors flex items-center space-x-2"
+                      >
+                        <GraduationCap className="w-4 h-4" />
+                        <span>Kênh giảng viên</span>
+                      </Link>
+                    </motion.div>
+                  )}
                   <motion.div
                     initial={{ opacity: 0, x: -20 }}
                     animate={{ opacity: 1, x: 0 }}
-                    transition={{ delay: navLinks.length * 0.06 }}
+                    transition={{ delay: (navLinks.length + 1) * 0.06 }}
                   >
                     <Link
                       to="/cart"
@@ -233,6 +258,22 @@ export function Layout() {
 
                   <div className="border-t border-border my-2" />
 
+                  {user?.role === 'admin' && (
+                    <motion.div
+                      initial={{ opacity: 0, x: -20 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      transition={{ delay: (navLinks.length + 2) * 0.06 }}
+                    >
+                      <Link
+                        to="/admin/users"
+                        onClick={() => setMobileMenuOpen(false)}
+                        className="block px-4 py-3 rounded-lg text-muted-foreground hover:bg-muted transition-colors flex items-center space-x-2"
+                      >
+                        <Shield className="w-4 h-4" />
+                        <span>Admin</span>
+                      </Link>
+                    </motion.div>
+                  )}
                   <motion.div
                     initial={{ opacity: 0, x: -20 }}
                     animate={{ opacity: 1, x: 0 }}

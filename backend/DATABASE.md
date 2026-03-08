@@ -53,9 +53,9 @@
 | GET | /api/courses/search | courses |
 | GET | /api/courses/:id | courses, lessons |
 | GET | /api/courses/:id/curriculum | lessons |
-| POST | /api/courses | courses |
-| PUT | /api/courses/:id | courses |
-| DELETE | /api/courses/:id | courses |
+| POST | /api/courses | courses *(auth, instructor)* |
+| PUT | /api/courses/:id | courses *(auth, chủ khóa hoặc admin)* |
+| DELETE | /api/courses/:id | courses *(auth, chủ khóa hoặc admin)* — xóa cả lessons của khóa |
 | POST | /api/courses/:id/lessons | lessons |
 | PUT | /api/lessons/:id | lessons |
 | DELETE | /api/lessons/:id | lessons |
@@ -73,13 +73,16 @@
 | GET | /api/payment/return | payments, enrollments |
 
 ### Learning (Module 4)
+*(Các endpoint dưới đây là implementation thực tế; logic tương đương với mô tả SRS.)*
 | Method | Endpoint | Collections |
 |--------|----------|-------------|
-| GET | /api/learning/:courseId | enrollments, lessons, progresses |
-| GET | /api/learning/:courseId/lessons/:lessonId | lessons, progresses |
-| PUT | /api/progress | progresses |
-| GET | /api/quizzes/:lessonId | quizzes |
-| POST | /api/quizzes/:id/submit | quizattempts |
+| GET | /api/courses/:id/learn | enrollments, lessons, progresses *(auth + isEnrolled)* |
+| GET | /api/lessons/:id/content | lessons, progresses *(auth + isEnrolled)* |
+| POST | /api/progress/mark-complete | progresses |
+| PUT | /api/progress/update-position | progresses |
+| GET | /api/progress/:courseId | progresses |
+| GET | /api/quizzes/:id | quizzes *(id = quizId; isEnrolled qua lesson → course)* |
+| POST | /api/quizzes/:id/attempt | quizattempts |
 
 ### Review & Certificate (Module 5-6)
 | Method | Endpoint | Collections |
