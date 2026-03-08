@@ -1,5 +1,5 @@
 import { Link, Outlet, useLocation, useNavigate } from "react-router-dom";
-import { Code2, User, LogIn, LogOut, Menu, X, ShoppingCart, Award, Shield, GraduationCap } from "lucide-react";
+import { Code2, User, LogIn, LogOut, Menu, X, ShoppingCart, Award, Shield, GraduationCap, UserPlus } from "lucide-react";
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "sonner";
@@ -25,6 +25,7 @@ export function Layout() {
   const isActive = (path) => location.pathname === path;
 
   const isLearner = isAuthenticated && !['admin', 'instructor'].includes(user?.role || '');
+  const isInstructor = isAuthenticated && user?.role === 'instructor';
 
   const navLinks = [
     { path: "/", label: "Trang chủ" },
@@ -32,7 +33,8 @@ export function Layout() {
     ...(isLearner ? [
       { path: "/my-courses", label: "Khóa của tôi" },
       { path: "/account", label: "Chứng chỉ", icon: Award },
-    ] : [])
+    ] : []),
+    ...(isInstructor ? [{ path: "/my-courses", label: "Khóa tôi dạy" }] : []),
   ];
 
   return (
@@ -106,28 +108,30 @@ export function Layout() {
 
             {/* Right section */}
             <div className="hidden md:flex items-center space-x-3">
-              <div className="relative">
-                <Link
-                  to="/cart"
-                  className="px-4 py-2 text-sm bg-gradient-to-r from-red-600 via-rose-500 to-red-500 text-white rounded-lg hover:shadow-lg hover:shadow-red-500/25 transition-all flex items-center space-x-2"
-                >
-                  <ShoppingCart className="w-4 h-4" />
-                  <span>Giỏ hàng</span>
-                </Link>
+              {isAuthenticated && !['instructor', 'admin'].includes(user?.role || '') && (
+                <div className="relative">
+                  <Link
+                    to="/cart"
+                    className="px-4 py-2 text-sm bg-gradient-to-r from-red-600 via-rose-500 to-red-500 text-white rounded-lg hover:shadow-lg hover:shadow-red-500/25 transition-all flex items-center space-x-2"
+                  >
+                    <ShoppingCart className="w-4 h-4" />
+                    <span>Giỏ hàng</span>
+                  </Link>
 
-                {cartItemCount > 0 && (
-                  <span className="absolute -top-2 -right-2 min-w-[20px] h-5 px-1.5 bg-white text-red-600 text-[11px] rounded-full flex items-center justify-center font-bold shadow-lg leading-none">
-                    {cartItemCount}
-                  </span>
-                )}
-              </div>
+                  {cartItemCount > 0 && (
+                    <span className="absolute -top-2 -right-2 min-w-[20px] h-5 px-1.5 bg-white text-red-600 text-[11px] rounded-full flex items-center justify-center font-bold shadow-lg leading-none">
+                      {cartItemCount}
+                    </span>
+                  )}
+                </div>
+              )}
 
               {isAuthenticated ? (
                 <>
                   {user?.role === 'admin' && (
                     <Link
                       to="/admin/users"
-                      className="px-3 py-2 text-sm border border-border rounded-lg hover:bg-muted transition-colors flex items-center space-x-1.5 text-muted-foreground"
+                      className="px-3 py-2 text-sm bg-gradient-to-r from-red-600 to-red-500 text-white rounded-lg hover:shadow-lg hover:shadow-red-500/25 transition-all flex items-center space-x-1.5"
                     >
                       <Shield className="w-4 h-4" />
                       <span>Admin</span>
@@ -136,7 +140,7 @@ export function Layout() {
                   {user?.role === 'instructor' && (
                     <Link
                       to="/instructor/courses"
-                      className="px-3 py-2 text-sm border border-border rounded-lg hover:bg-muted transition-colors flex items-center space-x-1.5 text-muted-foreground"
+                      className="px-3 py-2 text-sm bg-gradient-to-r from-red-600 to-red-500 text-white rounded-lg hover:shadow-lg hover:shadow-red-500/25 transition-all flex items-center space-x-1.5"
                     >
                       <GraduationCap className="w-4 h-4" />
                       <span>Kênh giảng viên</span>
@@ -159,6 +163,13 @@ export function Layout() {
                 </>
               ) : (
                 <>
+                  <Link
+                    to="/register"
+                    className="px-4 py-2 text-sm bg-gradient-to-r from-violet-600 via-purple-500 to-violet-600 text-white rounded-lg hover:shadow-lg hover:shadow-violet-500/25 transition-all flex items-center space-x-2"
+                  >
+                    <UserPlus className="w-4 h-4" />
+                    <span>Đăng ký</span>
+                  </Link>
                   <Link
                     to="/login"
                     className="px-4 py-2 text-sm bg-gradient-to-r from-blue-600 via-indigo-500 to-blue-500 text-white rounded-lg hover:shadow-lg hover:shadow-blue-500/25 transition-all flex items-center space-x-2"
@@ -223,35 +234,37 @@ export function Layout() {
                       animate={{ opacity: 1, x: 0 }}
                       transition={{ delay: navLinks.length * 0.06 }}
                     >
+                        <Link
+                            to="/instructor/courses"
+                            onClick={() => setMobileMenuOpen(false)}
+                            className="block px-4 py-3 rounded-lg bg-red-600 text-white hover:bg-red-500 transition-colors flex items-center space-x-2"
+                          >
+                            <GraduationCap className="w-4 h-4" />
+                            <span>Kênh giảng viên</span>
+                          </Link>
+                    </motion.div>
+                  )}
+                  {isAuthenticated && !['instructor', 'admin'].includes(user?.role || '') && (
+                      <motion.div
+                      initial={{ opacity: 0, x: -20 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      transition={{ delay: (navLinks.length + 1) * 0.06 }}
+                    >
                       <Link
-                        to="/instructor/courses"
+                        to="/cart"
                         onClick={() => setMobileMenuOpen(false)}
-                        className="block px-4 py-3 rounded-lg text-muted-foreground hover:bg-muted transition-colors flex items-center space-x-2"
+                        className="relative block px-4 py-3 rounded-lg text-muted-foreground hover:bg-muted transition-colors flex items-center space-x-2"
                       >
-                        <GraduationCap className="w-4 h-4" />
-                        <span>Kênh giảng viên</span>
+                        <ShoppingCart className="w-4 h-4" />
+                        <span>Giỏ hàng</span>
+                        {cartItemCount > 0 && (
+                          <span className="ml-auto min-w-[24px] h-6 px-2 bg-primary text-primary-foreground text-xs rounded-full flex items-center justify-center font-semibold">
+                            {cartItemCount}
+                          </span>
+                        )}
                       </Link>
                     </motion.div>
                   )}
-                  <motion.div
-                    initial={{ opacity: 0, x: -20 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    transition={{ delay: (navLinks.length + 1) * 0.06 }}
-                  >
-                    <Link
-                      to="/cart"
-                      onClick={() => setMobileMenuOpen(false)}
-                      className="relative block px-4 py-3 rounded-lg text-muted-foreground hover:bg-muted transition-colors flex items-center space-x-2"
-                    >
-                      <ShoppingCart className="w-4 h-4" />
-                      <span>Giỏ hàng</span>
-                      {cartItemCount > 0 && (
-                        <span className="ml-auto min-w-[24px] h-6 px-2 bg-primary text-primary-foreground text-xs rounded-full flex items-center justify-center font-semibold">
-                          {cartItemCount}
-                        </span>
-                      )}
-                    </Link>
-                  </motion.div>
 
                   <div className="border-t border-border my-2" />
 
@@ -266,7 +279,7 @@ export function Layout() {
                           <Link
                             to="/admin/users"
                             onClick={() => setMobileMenuOpen(false)}
-                            className="block px-4 py-3 rounded-lg text-muted-foreground hover:bg-muted transition-colors flex items-center space-x-2"
+                            className="block px-4 py-3 rounded-lg bg-red-600 text-white hover:bg-red-500 transition-colors flex items-center space-x-2"
                           >
                             <Shield className="w-4 h-4" />
                             <span>Admin</span>
@@ -305,20 +318,36 @@ export function Layout() {
                       </motion.div>
                     </>
                   ) : (
-                    <motion.div
-                      initial={{ opacity: 0, x: -20 }}
-                      animate={{ opacity: 1, x: 0 }}
-                      transition={{ delay: (navLinks.length + 1) * 0.06 }}
-                    >
-                      <Link
-                        to="/login"
-                        onClick={() => setMobileMenuOpen(false)}
-                        className="block px-4 py-3 rounded-lg text-muted-foreground hover:bg-muted transition-colors flex items-center space-x-2"
+                    <>
+                      <motion.div
+                        initial={{ opacity: 0, x: -20 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        transition={{ delay: (navLinks.length + 1) * 0.06 }}
                       >
-                        <LogIn className="w-4 h-4" />
-                        <span>Đăng nhập</span>
-                      </Link>
-                    </motion.div>
+                        <Link
+                          to="/register"
+                          onClick={() => setMobileMenuOpen(false)}
+                          className="block px-4 py-3 rounded-lg bg-gradient-to-r from-violet-600 to-purple-500 text-white hover:shadow-lg hover:shadow-violet-500/20 transition-all flex items-center space-x-2"
+                        >
+                          <UserPlus className="w-4 h-4" />
+                          <span>Đăng ký</span>
+                        </Link>
+                      </motion.div>
+                      <motion.div
+                        initial={{ opacity: 0, x: -20 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        transition={{ delay: (navLinks.length + 2) * 0.06 }}
+                      >
+                        <Link
+                          to="/login"
+                          onClick={() => setMobileMenuOpen(false)}
+                          className="block px-4 py-3 rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 transition-colors flex items-center space-x-2"
+                        >
+                          <LogIn className="w-4 h-4" />
+                          <span>Đăng nhập</span>
+                        </Link>
+                      </motion.div>
+                    </>
                   )}
                 </div>
               </motion.div>
