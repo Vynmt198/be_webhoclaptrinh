@@ -23,9 +23,17 @@ const quizzesRoutes = require('./routes/quizzes');
 const instructorRoutes = require('./routes/instructor');
 const certificateRoutes = require('./routes/certificates');
 const discussionRoutes = require('./routes/discussions');
+const uploadRoutes = require('./routes/upload');
+const path = require('path');
+const fs = require('fs');
 const app = express();
 
 connectDB();
+
+// Ensure uploads dir exists and serve static thumbnails
+const uploadsDir = path.join(process.cwd(), 'uploads');
+if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
+app.use('/uploads', express.static(uploadsDir));
 
 app.use(helmet());
 app.use(cors({
@@ -59,6 +67,7 @@ app.use('/api/quizzes', quizzesRoutes);
 app.use('/api/instructor', instructorRoutes);
 app.use('/api/certificates', certificateRoutes);
 app.use('/api/discussions', discussionRoutes);
+app.use('/api/upload', uploadRoutes);
 
 app.get('/api/health', (req, res) => {
     res.status(200).json({

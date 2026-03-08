@@ -1,4 +1,5 @@
-import { useParams, Link, useNavigate } from 'react-router-dom';
+import { useParams, Link, useNavigate, useLocation } from 'react-router-dom';
+import { useEffect, useState } from 'react';
 import { motion } from 'motion/react';
 import {
   Star,
@@ -10,68 +11,234 @@ import {
   Play,
   ArrowLeft,
   ShoppingCart,
-  ThumbsUp,
-  Globe,
-  Github,
-  Linkedin
+  Loader2,
+  Send,
 } from 'lucide-react';
-import { getCourseById } from '@/app/data/courses';
-import { useState } from 'react';
+import { courseApi, reviewApi, Course, Lesson, type Review } from '@/app/lib/api';
 import { useCart } from '@/app/context/CartContext';
+import { useAuth } from '@/app/context/AuthContext';
+import { toast } from 'sonner';
+
+function formatLevel(level?: string) {
+  if (!level) return '-';
+  const map: Record<string, string> = {
+    beginner: 'Cơ bản',
+    intermediate: 'Trung cấp',
+    advanced: 'Nâng cao',
+    'all-levels': 'Mọi cấp độ',
+  };
+  return map[level] || level;
+}
+
+function formatDuration(minutes?: number) {
+  if (!minutes) return '0 giờ';
+  if (minutes < 60) return `${minutes} phút`;
+  return `${Math.round(minutes / 60)} giờ`;
+}
+
+function formatLessonDuration(seconds?: number) {
+  if (!seconds) return '0:00';
+  const m = Math.floor(seconds / 60);
+  const s = seconds % 60;
+  return `${m}:${s.toString().padStart(2, '0')}`;
+}
 
 export function CourseDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const course = getCourseById(id || '');
+  const location = useLocation();
+  const fromState = (location.state as { from?: string } | null)?.from;
+  const fromMyCourses = fromState === 'my-courses';
+  const fromAdminCourses = fromState === 'admin-courses';
+  const backPath = fromAdminCourses ? '/admin/courses' : fromMyCourses ? '/my-courses' : '/courses';
+  const backLabel = fromAdminCourses ? 'Quay lại duyệt khóa học' : fromMyCourses ? 'Quay lại khóa học của tôi' : 'Quay lại khóa học';
+  const [course, setCourse] = useState<Course | null>(null);
+  const [curriculum, setCurriculum] = useState<Lesson[]>([]);
+  const [reviews, setReviews] = useState<Review[]>([]);
+  const [reviewsPage, setReviewsPage] = useState(1);
+  const [reviewsTotalPages, setReviewsTotalPages] = useState(1);
+  const [myReview, setMyReview] = useState<Review | null>(null);
+  const [myReviewLoading, setMyReviewLoading] = useState(false);
+  const [reviewForm, setReviewForm] = useState({ rating: 5, reviewText: '' });
+  const [submittingReview, setSubmittingReview] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [showCheckout, setShowCheckout] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
   const { addToCart, items } = useCart();
+  const { user } = useAuth();
+
+  useEffect(() => {
+    if (!id) return;
+    setLoading(true);
+    Promise.all([courseApi.getById(id), courseApi.getCurriculum(id)])
+      .then(([courseRes, curriculumRes]) => {
+        setCourse(courseRes.data);
+        setCurriculum(curriculumRes.data || []);
+      })
+      .catch(() => setCourse(null))
+      .finally(() => setLoading(false));
+  }, [id]);
+
+  useEffect(() => {
+    if (!id) return;
+    courseApi
+      .getReviews(id, { page: reviewsPage, limit: 5 })
+      .then((res) => {
+        setReviews(res.data.reviews || []);
+        const p = res.data.pagination;
+        setReviewsTotalPages(p?.totalPages ?? (p?.total && p?.limit ? Math.ceil(p.total / p.limit) : 1));
+      })
+      .catch(() => setReviews([]));
+  }, [id, reviewsPage]);
+
+  useEffect(() => {
+    if (!id || !user) {
+      setMyReview(null);
+      setReviewForm({ rating: 5, reviewText: '' });
+      return;
+    }
+    setMyReviewLoading(true);
+    reviewApi
+      .getMyReview(id)
+      .then((res) => {
+        setMyReview(res.data.review);
+        setReviewForm({
+          rating: res.data.review.rating || 5,
+          reviewText: res.data.review.reviewText || res.data.review.comment || '',
+        });
+      })
+      .catch(() => {
+        setMyReview(null);
+        setReviewForm({ rating: 5, reviewText: '' });
+      })
+      .finally(() => setMyReviewLoading(false));
+  }, [id, user]);
+
+  const refetchReviews = () => {
+    if (!id) return;
+    courseApi.getReviews(id, { page: reviewsPage, limit: 5 }).then((res) => {
+      setReviews(res.data.reviews || []);
+      const p = res.data.pagination;
+      setReviewsTotalPages(p?.totalPages ?? (p?.total && p?.limit ? Math.ceil(p.total / p.limit) : 1));
+    }).catch(() => {});
+  };
+
+  const handleSubmitReview = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!id || !user) return;
+    if (reviewForm.rating < 1 || reviewForm.rating > 5) {
+      toast.error('Vui lòng chọn điểm từ 1 đến 5.');
+      return;
+    }
+    setSubmittingReview(true);
+    if (myReview) {
+      reviewApi
+        .update(myReview._id, { rating: reviewForm.rating, reviewText: reviewForm.reviewText || undefined })
+        .then((res) => {
+          setMyReview(res.data.review);
+          toast.success('Đã cập nhật đánh giá.');
+          refetchReviews();
+          courseApi.getById(id).then((r) => setCourse(r.data)).catch(() => {});
+        })
+        .catch((err: Error) => toast.error(err?.message || 'Không thể cập nhật đánh giá.'))
+        .finally(() => setSubmittingReview(false));
+    } else {
+      reviewApi
+        .create({ courseId: id, rating: reviewForm.rating, reviewText: reviewForm.reviewText || undefined })
+        .then((res) => {
+          setMyReview(res.data.review);
+          toast.success('Đã gửi đánh giá.');
+          refetchReviews();
+          courseApi.getById(id).then((r) => setCourse(r.data)).catch(() => {});
+        })
+        .catch((err: Error) => toast.error(err?.message || 'Bạn cần ghi danh khóa học để đánh giá.'))
+        .finally(() => setSubmittingReview(false));
+    }
+  };
+
+  const handleEnroll = () => {
+    if (!course) return;
+    const cartItem = {
+      id: course._id,
+      title: course.title,
+      price: course.price,
+      image:
+        course.thumbnail ||
+        'https://images.unsplash.com/photo-1516321318423-f06f85e504b3?w=800',
+    };
+    addToCart(cartItem);
+    navigate('/checkout');
+  };
+
+  const handleAddToCart = () => {
+    if (!course) return;
+    const cartItem = {
+      id: course._id,
+      title: course.title,
+      price: course.price,
+      image:
+        course.thumbnail ||
+        'https://images.unsplash.com/photo-1516321318423-f06f85e504b3?w=800',
+    };
+    addToCart(cartItem);
+  };
+
+  const isInCart = course ? items.some((item: { id: string }) => item.id === course._id) : false;
+
+  const isOwner = user && course && (course.instructorId?._id === user._id || user.role === 'admin');
+  const handleSubmitForReview = () => {
+    if (!course) return;
+    setSubmitting(true);
+    courseApi
+      .update(course._id, { submitForReview: true })
+      .then((res) => {
+        setCourse(res.data);
+        toast.success('Đã gửi khóa học chờ admin duyệt.');
+      })
+      .catch((err: Error) => toast.error(err.message || 'Không thể gửi duyệt.'))
+      .finally(() => setSubmitting(false));
+  };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <Loader2 className="w-12 h-12 text-primary animate-spin" />
+      </div>
+    );
+  }
 
   if (!course) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">
           <h2 className="text-2xl font-bold mb-4">Không tìm thấy khóa học</h2>
-          <Link to="/courses" className="text-primary hover:underline">
-            Quay lại danh sách khóa học
+          <Link to={backPath} className="text-primary hover:underline">
+            {fromMyCourses ? 'Quay lại khóa học của tôi' : 'Quay lại danh sách khóa học'}
           </Link>
         </div>
       </div>
     );
   }
 
-  const handleEnroll = () => {
-    if (course) {
-      addToCart(course);
-      navigate('/checkout');
-    }
-  };
-
-  const handleAddToCart = () => {
-    if (course) {
-      addToCart(course);
-    }
-  };
-
-  const isInCart = course ? items.some(item => item.id === course.id) : false;
+  const instructorName = course.instructorId?.fullName || '-';
+  const categoryName = course.categoryId?.name || '-';
 
   return (
     <div className="min-h-screen">
-      {/* Hero Section */}
       <section className="relative bg-gradient-to-br from-background via-primary/5 to-accent/5 py-12 border-b border-border">
         <div className="container mx-auto px-4">
           <motion.button
             initial={{ opacity: 0, x: -20 }}
             animate={{ opacity: 1, x: 0 }}
             transition={{ duration: 0.4 }}
-            onClick={() => navigate('/courses')}
+            onClick={() => navigate(backPath)}
             className="flex items-center space-x-2 text-muted-foreground hover:text-foreground mb-6 transition-colors"
           >
             <ArrowLeft className="w-5 h-5" />
-            <span>Quay lại khóa học</span>
+            <span>{backLabel}</span>
           </motion.button>
 
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-            {/* Left Column - Course Info */}
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
@@ -79,147 +246,51 @@ export function CourseDetail() {
               className="lg:col-span-2"
             >
               <div className="inline-block px-3 py-1 bg-primary/10 text-primary rounded-full text-sm font-medium mb-4">
-                {course.category}
+                {categoryName}
               </div>
 
               <h1 className="text-3xl md:text-4xl font-bold mb-4">{course.title}</h1>
 
-              <p className="text-lg text-muted-foreground mb-6">{course.description}</p>
+              <p className="text-lg text-muted-foreground mb-6">
+                {course.description || 'Chưa có mô tả.'}
+              </p>
 
               <div className="flex flex-wrap gap-6 mb-6">
                 <div className="flex items-center space-x-2">
                   <Star className="w-5 h-5 fill-yellow-500 text-yellow-500" />
-                  <span className="font-semibold">{course.rating}</span>
-                  <span className="text-muted-foreground">({course.students} đánh giá)</span>
+                  <span className="font-semibold">{course.averageRating?.toFixed(1) || '0'}</span>
+                  <span className="text-muted-foreground">đánh giá</span>
                 </div>
                 <div className="flex items-center space-x-2 text-muted-foreground">
                   <Users className="w-5 h-5" />
-                  <span>{course.students.toLocaleString()} học viên</span>
+                  <span>{(course.enrollmentCount || 0).toLocaleString()} học viên</span>
                 </div>
                 <div className="flex items-center space-x-2 text-muted-foreground">
                   <Clock className="w-5 h-5" />
-                  <span>{course.duration}</span>
+                  <span>{formatDuration(course.totalDuration)}</span>
                 </div>
                 <div className="flex items-center space-x-2 text-muted-foreground">
                   <BookOpen className="w-5 h-5" />
-                  <span>{course.lessons} bài học</span>
+                  <span>{course.totalLessons || 0} bài học</span>
                 </div>
               </div>
 
-              {/* Instructor Info */}
-              {course.instructorInfo ? (
-                <div className="bg-card border border-border rounded-xl p-6">
-                  <div className="flex items-start space-x-4 mb-4">
-                    <img
-                      src={course.instructorInfo.avatar}
-                      alt={course.instructorInfo.name}
-                      className="w-16 h-16 rounded-full object-cover border-2 border-primary/20"
-                    />
-                    <div className="flex-1">
-                      <p className="text-sm text-muted-foreground mb-1">Giảng viên</p>
-                      <h3 className="text-lg font-bold mb-1">{course.instructorInfo.name}</h3>
-                      <p className="text-sm text-muted-foreground mb-2">{course.instructorInfo.title}</p>
-                      
-                      {/* Social Links */}
-                      {course.instructorInfo.social && (
-                        <div className="flex items-center space-x-2">
-                          {course.instructorInfo.social.website && (
-                            <a
-                              href={course.instructorInfo.social.website}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="text-muted-foreground hover:text-primary transition-colors"
-                            >
-                              <Globe className="w-4 h-4" />
-                            </a>
-                          )}
-                          {course.instructorInfo.social.github && (
-                            <a
-                              href={course.instructorInfo.social.github}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="text-muted-foreground hover:text-primary transition-colors"
-                            >
-                              <Github className="w-4 h-4" />
-                            </a>
-                          )}
-                          {course.instructorInfo.social.linkedin && (
-                            <a
-                              href={course.instructorInfo.social.linkedin}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="text-muted-foreground hover:text-primary transition-colors"
-                            >
-                              <Linkedin className="w-4 h-4" />
-                            </a>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Instructor Stats */}
-                  <div className="grid grid-cols-4 gap-3 mb-4">
-                    <div className="text-center p-3 bg-gradient-to-br from-primary/5 to-accent/5 rounded-lg border border-primary/10">
-                      <div className="text-xl font-bold text-primary mb-0.5">
-                        {course.instructorInfo.stats.courses}
-                      </div>
-                      <div className="text-xs text-muted-foreground">Khóa học</div>
-                    </div>
-                    <div className="text-center p-3 bg-gradient-to-br from-primary/5 to-accent/5 rounded-lg border border-primary/10">
-                      <div className="text-xl font-bold text-primary mb-0.5">
-                        {(course.instructorInfo.stats.students / 1000).toFixed(1)}K+
-                      </div>
-                      <div className="text-xs text-muted-foreground">Học viên</div>
-                    </div>
-                    <div className="text-center p-3 bg-gradient-to-br from-primary/5 to-accent/5 rounded-lg border border-primary/10">
-                      <div className="text-xl font-bold text-primary mb-0.5 flex items-center justify-center">
-                        <Star className="w-4 h-4 fill-yellow-500 text-yellow-500 mr-0.5" />
-                        {course.instructorInfo.stats.rating}
-                      </div>
-                      <div className="text-xs text-muted-foreground">Đánh giá</div>
-                    </div>
-                    <div className="text-center p-3 bg-gradient-to-br from-primary/5 to-accent/5 rounded-lg border border-primary/10">
-                      <div className="text-xl font-bold text-primary mb-0.5">
-                        {(course.instructorInfo.stats.reviews / 1000).toFixed(1)}K+
-                      </div>
-                      <div className="text-xs text-muted-foreground">Reviews</div>
-                    </div>
-                  </div>
-
-                  {/* Bio */}
-                  <p className="text-sm text-muted-foreground leading-relaxed mb-3">
-                    {course.instructorInfo.bio}
-                  </p>
-
-                  {/* Specialties */}
-                  <div className="flex flex-wrap gap-2">
-                    {course.instructorInfo.specialties.map((specialty, index) => (
-                      <span
-                        key={index}
-                        className="px-2 py-1 bg-gradient-to-r from-primary/10 to-accent/10 border border-primary/20 text-primary rounded text-xs font-medium"
-                      >
-                        {specialty}
-                      </span>
-                    ))}
-                  </div>
+              <div className="flex items-center space-x-4">
+                <img
+                  src={
+                    course.instructorId?.avatar ||
+                    `https://ui-avatars.com/api/?name=${encodeURIComponent(instructorName)}&background=3b82f6&color=fff`
+                  }
+                  alt={instructorName}
+                  className="w-12 h-12 rounded-full object-cover"
+                />
+                <div>
+                  <p className="text-sm text-muted-foreground">Giảng viên</p>
+                  <p className="font-medium">{instructorName}</p>
                 </div>
-              ) : (
-                <div className="flex items-center space-x-4">
-                  <img
-                    src={`https://ui-avatars.com/api/?name=${encodeURIComponent(course.instructor)}&background=3b82f6&color=fff`}
-                    alt={course.instructor}
-                    className="w-12 h-12 rounded-full"
-                  />
-                  <div>
-                    <p className="text-sm text-muted-foreground">Giảng viên</p>
-                    <p className="font-medium">{course.instructor}</p>
-                  </div>
-                </div>
-              )}
+              </div>
             </motion.div>
 
-            {/* Right Column - Course Card */}
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
@@ -228,7 +299,14 @@ export function CourseDetail() {
             >
               <div className="bg-card border border-border rounded-xl overflow-hidden shadow-xl">
                 <div className="relative aspect-video">
-                  <img src={course.image} alt={course.title} className="w-full h-full object-cover" />
+                  <img
+                    src={
+                      course.thumbnail ||
+                      'https://images.unsplash.com/photo-1516321318423-f06f85e504b3?w=800'
+                    }
+                    alt={course.title}
+                    className="w-full h-full object-cover"
+                  />
                   <button className="absolute inset-0 flex items-center justify-center bg-black/50 hover:bg-black/40 transition-colors group">
                     <div className="w-16 h-16 bg-primary rounded-full flex items-center justify-center group-hover:scale-110 transition-transform">
                       <Play className="w-8 h-8 text-white ml-1" />
@@ -238,36 +316,52 @@ export function CourseDetail() {
 
                 <div className="p-6">
                   <div className="mb-6">
-                    {course.originalPrice && (
-                      <div className="text-muted-foreground line-through mb-1">
-                        {course.originalPrice.toLocaleString('vi-VN')}đ
-                      </div>
-                    )}
                     <div className="text-3xl font-bold text-primary">
-                      {course.price.toLocaleString('vi-VN')}đ
+                      {course.price === 0
+                        ? 'Miễn phí'
+                        : `${(course.price || 0).toLocaleString('vi-VN')}đ`}
                     </div>
-                    {course.originalPrice && (
-                      <div className="inline-block mt-2 px-2 py-1 bg-green-500/10 text-green-500 rounded text-sm font-medium">
-                        Giảm {Math.round(((course.originalPrice - course.price) / course.originalPrice) * 100)}%
-                      </div>
-                    )}
                   </div>
 
-                  <button
-                    onClick={handleEnroll}
-                    className="w-full py-4 bg-gradient-to-r from-blue-600 via-indigo-500 to-blue-500 text-white rounded-lg hover:shadow-2xl hover:shadow-blue-500/30 transition-all font-semibold flex items-center justify-center space-x-2 mb-3 btn-shine border-2 border-blue-500/20 hover:scale-[1.02] active:scale-95"
-                  >
-                    <ShoppingCart className="w-5 h-5" />
-                    <span>Đăng ký ngay</span>
-                  </button>
+                  {isOwner && course.status === 'draft' && (
+                    <>
+                      <Link
+                        to={`/instructor/courses/${course._id}/edit`}
+                        className="w-full py-4 bg-primary hover:bg-primary/90 text-primary-foreground rounded-lg transition-colors font-semibold flex items-center justify-center gap-2 mb-3"
+                      >
+                        <span>Chỉnh sửa khóa học</span>
+                      </Link>
+                      <button
+                        onClick={handleSubmitForReview}
+                        disabled={submitting}
+                        className="w-full py-4 bg-amber-500 hover:bg-amber-600 text-white rounded-lg transition-colors font-semibold flex items-center justify-center gap-2 mb-3 disabled:opacity-50"
+                      >
+                        {submitting ? <Loader2 className="w-5 h-5 animate-spin" /> : <Send className="w-5 h-5" />}
+                        <span>Gửi duyệt</span>
+                      </button>
+                    </>
+                  )}
 
-                  <button
-                    onClick={handleAddToCart}
-                    disabled={isInCart}
-                    className="w-full py-4 border-2 border-primary/50 hover:border-primary bg-gradient-to-r from-primary/10 to-accent/10 text-foreground rounded-lg hover:bg-primary/20 transition-all font-semibold disabled:opacity-50 disabled:cursor-not-allowed btn-shine"
-                  >
-                    {isInCart ? 'Đã thêm vào giỏ' : 'Thêm vào giỏ hàng'}
-                  </button>
+                  {/* Admin không thấy nút mua/đăng ký */}
+                  {user?.role !== 'admin' && (
+                    <>
+                      <button
+                        onClick={handleEnroll}
+                        className="w-full py-4 bg-gradient-to-r from-blue-600 via-indigo-500 to-blue-500 text-white rounded-lg hover:shadow-2xl hover:shadow-blue-500/30 transition-all font-semibold flex items-center justify-center space-x-2 mb-3 btn-shine border-2 border-blue-500/20 hover:scale-[1.02] active:scale-95"
+                      >
+                        <ShoppingCart className="w-5 h-5" />
+                        <span>Đăng ký ngay</span>
+                      </button>
+
+                      <button
+                        onClick={handleAddToCart}
+                        disabled={isInCart}
+                        className="w-full py-4 border-2 border-primary/50 hover:border-primary bg-gradient-to-r from-primary/10 to-accent/10 text-foreground rounded-lg hover:bg-primary/20 transition-all font-semibold disabled:opacity-50 disabled:cursor-not-allowed btn-shine"
+                      >
+                        {isInCart ? 'Đã thêm vào giỏ' : 'Thêm vào giỏ hàng'}
+                      </button>
+                    </>
+                  )}
 
                   <div className="mt-6 space-y-3 text-sm">
                     <div className="flex items-center space-x-2 text-muted-foreground">
@@ -290,31 +384,23 @@ export function CourseDetail() {
         </div>
       </section>
 
-      {/* Course Content */}
       <section className="py-12">
         <div className="container mx-auto px-4">
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
             <div className="lg:col-span-2 space-y-8">
-              {/* What You'll Learn */}
-              <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true }}
-                transition={{ duration: 0.6 }}
-                className="bg-card border border-border rounded-xl p-6"
-              >
-                <h2 className="text-2xl font-bold mb-6">Bạn sẽ học được gì</h2>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {course.features.map((feature, index) => (
-                    <div key={index} className="flex items-start space-x-3">
-                      <CheckCircle2 className="w-5 h-5 text-primary flex-shrink-0 mt-0.5" />
-                      <span className="text-muted-foreground">{feature}</span>
-                    </div>
-                  ))}
-                </div>
-              </motion.div>
+              {course.syllabus && (
+                <motion.div
+                  initial={{ opacity: 0, y: 20 }}
+                  whileInView={{ opacity: 1, y: 0 }}
+                  viewport={{ once: true }}
+                  transition={{ duration: 0.6 }}
+                  className="bg-card border border-border rounded-xl p-6"
+                >
+                  <h2 className="text-2xl font-bold mb-6">Bạn sẽ học được gì</h2>
+                  <p className="text-muted-foreground whitespace-pre-wrap">{course.syllabus}</p>
+                </motion.div>
+              )}
 
-              {/* Curriculum */}
               <motion.div
                 initial={{ opacity: 0, y: 20 }}
                 whileInView={{ opacity: 1, y: 0 }}
@@ -324,137 +410,177 @@ export function CourseDetail() {
               >
                 <h2 className="text-2xl font-bold mb-6">Nội dung khóa học</h2>
                 <div className="space-y-4">
-                  {course.curriculum.map((section, index) => (
-                    <div key={index} className="border border-border rounded-lg overflow-hidden">
-                      <div className="bg-muted/50 p-4 flex items-center justify-between">
-                        <h3 className="font-semibold">{section.section}</h3>
+                  {curriculum.length > 0 ? (
+                    curriculum.map((lesson) => (
+                      <div
+                        key={lesson._id}
+                        className="p-4 flex items-center space-x-3 hover:bg-muted/30 transition-colors rounded-lg border border-border"
+                      >
+                        <Play className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+                        <span className="flex-1">{lesson.title}</span>
                         <span className="text-sm text-muted-foreground">
-                          {section.lessons.length} bài học
+                          {formatLessonDuration(lesson.duration)}
                         </span>
+                        {lesson.isPreview && (
+                          <span className="px-2 py-0.5 bg-primary/10 text-primary text-xs rounded">
+                            Xem trước
+                          </span>
+                        )}
                       </div>
-                      <div className="divide-y divide-border">
-                        {section.lessons.map((lesson, lessonIndex) => (
-                          <div key={lessonIndex} className="p-4 flex items-center space-x-3 hover:bg-muted/30 transition-colors">
-                            <Play className="w-4 h-4 text-muted-foreground" />
-                            <span className="flex-1">{lesson}</span>
-                            <span className="text-sm text-muted-foreground">10:00</span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  ))}
+                    ))
+                  ) : (
+                    <p className="text-muted-foreground">Chưa có bài học.</p>
+                  )}
                 </div>
               </motion.div>
 
-              {/* Requirements */}
               <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true }}
-                transition={{ duration: 0.6 }}
-                className="bg-card border border-border rounded-xl p-6"
+                id="reviews"
+                initial={{ opacity: 1, y: 0 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="bg-card border border-border rounded-xl p-6 scroll-mt-24"
               >
-                <h2 className="text-2xl font-bold mb-6">Yêu cầu</h2>
-                <ul className="space-y-3 text-muted-foreground">
-                  <li className="flex items-start space-x-3">
-                    <CheckCircle2 className="w-5 h-5 text-muted-foreground flex-shrink-0 mt-0.5" />
-                    <span>Kiến thức cơ bản về HTML, CSS, JavaScript</span>
-                  </li>
-                  <li className="flex items-start space-x-3">
-                    <CheckCircle2 className="w-5 h-5 text-muted-foreground flex-shrink-0 mt-0.5" />
-                    <span>Máy tính có kết nối internet</span>
-                  </li>
-                  <li className="flex items-start space-x-3">
-                    <CheckCircle2 className="w-5 h-5 text-muted-foreground flex-shrink-0 mt-0.5" />
-                    <span>Tinh thần học hỏi và thực hành</span>
-                  </li>
-                </ul>
-              </motion.div>
-
-              {/* Student Reviews */}
-              {course.reviews && course.reviews.length > 0 && (
-                <motion.div
-                  initial={{ opacity: 0, y: 20 }}
-                  whileInView={{ opacity: 1, y: 0 }}
-                  viewport={{ once: true }}
-                  transition={{ duration: 0.6 }}
-                  className="bg-card border border-border rounded-xl p-6"
-                >
-                  <div className="flex items-center justify-between mb-6">
-                    <h2 className="text-2xl font-bold">Đánh giá của học viên</h2>
-                    <div className="flex items-center space-x-2">
-                      <Star className="w-5 h-5 fill-yellow-500 text-yellow-500" />
-                      <span className="text-xl font-bold">{course.rating}</span>
-                      <span className="text-muted-foreground">({course.reviews.length} đánh giá)</span>
-                    </div>
+                <h2 className="text-2xl font-bold mb-4">Đánh giá & xếp hạng</h2>
+                <div className="flex items-center gap-4 mb-6">
+                  <div className="flex items-center gap-1">
+                    <Star className="w-8 h-8 fill-yellow-500 text-yellow-500" />
+                    <span className="text-2xl font-bold">
+                      {(course.averageRating ?? 0).toFixed(1)}
+                    </span>
                   </div>
+                  <span className="text-muted-foreground">
+                    (từ khóa học)
+                  </span>
+                </div>
 
-                  <div className="space-y-6">
-                    {course.reviews.map((review) => (
-                      <motion.div
-                        key={review.id}
-                        initial={{ opacity: 0, y: 10 }}
-                        whileInView={{ opacity: 1, y: 0 }}
-                        viewport={{ once: true }}
-                        transition={{ duration: 0.4 }}
-                        className="border-b border-border last:border-0 pb-6 last:pb-0"
-                      >
-                        <div className="flex items-start space-x-4">
-                          <img
-                            src={review.userAvatar}
-                            alt={review.userName}
-                            className="w-12 h-12 rounded-full object-cover"
-                          />
-                          <div className="flex-1">
-                            <div className="flex items-center justify-between mb-2">
-                              <div>
-                                <h4 className="font-semibold">{review.userName}</h4>
-                                <div className="flex items-center space-x-2 mt-1">
-                                  <div className="flex items-center">
-                                    {Array.from({ length: 5 }).map((_, i) => (
-                                      <Star
-                                        key={i}
-                                        className={`w-4 h-4 ${
-                                          i < review.rating
-                                            ? 'fill-yellow-500 text-yellow-500'
-                                            : 'text-muted-foreground/30'
-                                        }`}
-                                      />
-                                    ))}
-                                  </div>
-                                  <span className="text-sm text-muted-foreground">
-                                    {new Date(review.date).toLocaleDateString('vi-VN', {
-                                      year: 'numeric',
-                                      month: 'long',
-                                      day: 'numeric'
-                                    })}
-                                  </span>
-                                </div>
-                              </div>
-                            </div>
-                            <p className="text-muted-foreground mb-3 leading-relaxed">
-                              {review.comment}
-                            </p>
-                            <button className="flex items-center space-x-2 text-sm text-muted-foreground hover:text-primary transition-colors group">
-                              <ThumbsUp className="w-4 h-4 group-hover:fill-primary/20" />
-                              <span>Hữu ích ({review.helpful})</span>
-                            </button>
+                {user && !isOwner && (
+                  <div className="mb-6 p-4 rounded-xl border border-border bg-muted/20">
+                    {myReviewLoading ? (
+                      <div className="flex items-center gap-2 text-muted-foreground">
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        <span>Đang tải...</span>
+                      </div>
+                    ) : (
+                      <form onSubmit={handleSubmitReview} className="space-y-4">
+                        <h3 className="font-semibold">
+                          {myReview ? 'Chỉnh sửa đánh giá của bạn' : 'Viết đánh giá'}
+                        </h3>
+                        <div>
+                          <p className="text-sm text-muted-foreground mb-2">Điểm (1–5 sao)</p>
+                          <div className="flex gap-1">
+                            {[1, 2, 3, 4, 5].map((i) => (
+                              <button
+                                key={i}
+                                type="button"
+                                onClick={() => setReviewForm((f) => ({ ...f, rating: i }))}
+                                className="p-1 rounded hover:bg-muted/50 transition-colors"
+                              >
+                                <Star
+                                  className={`w-8 h-8 ${
+                                    i <= reviewForm.rating
+                                      ? 'fill-yellow-500 text-yellow-500'
+                                      : 'text-muted-foreground/30'
+                                  }`}
+                                />
+                              </button>
+                            ))}
                           </div>
                         </div>
-                      </motion.div>
-                    ))}
+                        <div>
+                          <label className="block text-sm text-muted-foreground mb-1">Nội dung (tùy chọn)</label>
+                          <textarea
+                            value={reviewForm.reviewText}
+                            onChange={(e) => setReviewForm((f) => ({ ...f, reviewText: e.target.value }))}
+                            placeholder="Chia sẻ trải nghiệm của bạn..."
+                            rows={3}
+                            maxLength={1000}
+                            className="w-full px-3 py-2 border border-border rounded-lg bg-background focus:ring-2 focus:ring-primary/50 outline-none resize-none"
+                          />
+                          <p className="text-xs text-muted-foreground mt-1">{reviewForm.reviewText.length}/1000</p>
+                        </div>
+                        <button
+                          type="submit"
+                          disabled={submittingReview}
+                          className="px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 font-medium disabled:opacity-50 flex items-center gap-2"
+                        >
+                          {submittingReview && <Loader2 className="w-4 h-4 animate-spin" />}
+                          {myReview ? 'Cập nhật đánh giá' : 'Gửi đánh giá'}
+                        </button>
+                      </form>
+                    )}
                   </div>
+                )}
 
-                  {course.reviews.length > 5 && (
-                    <button className="w-full mt-6 py-3 border border-border rounded-lg hover:bg-muted transition-colors font-medium">
-                      Xem tất cả {course.reviews.length} đánh giá
-                    </button>
+                <div className="space-y-4">
+                  {reviews.length === 0 ? (
+                    <p className="text-muted-foreground">Chưa có đánh giá nào.</p>
+                  ) : (
+                    reviews.map((r) => (
+                      <div
+                        key={r._id}
+                        className="p-4 rounded-lg border border-border bg-muted/20"
+                      >
+                        <div className="flex items-center gap-3 mb-2">
+                          <img
+                            src={
+                              r.userId?.avatar ||
+                              `https://ui-avatars.com/api/?name=${encodeURIComponent(r.userId?.fullName || 'U')}&background=6b7280&color=fff`
+                            }
+                            alt=""
+                            className="w-10 h-10 rounded-full object-cover"
+                          />
+                          <div>
+                            <p className="font-medium">{r.userId?.fullName || 'Ẩn danh'}</p>
+                            <div className="flex items-center gap-1">
+                              {[1, 2, 3, 4, 5].map((i) => (
+                                <Star
+                                  key={i}
+                                  className={`w-4 h-4 ${
+                                    i <= (r.rating || 0)
+                                      ? 'fill-yellow-500 text-yellow-500'
+                                      : 'text-muted-foreground/30'
+                                  }`}
+                                />
+                              ))}
+                              <span className="text-sm text-muted-foreground ml-1">
+                                {r.rating}/5
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                        {(r.reviewText ?? r.comment) && (
+                          <p className="text-muted-foreground text-sm pl-12">{r.reviewText ?? r.comment}</p>
+                        )}
+                      </div>
+                    ))
                   )}
-                </motion.div>
-              )}
+                </div>
+                {reviewsTotalPages > 1 && (
+                  <div className="mt-4 flex justify-center gap-2">
+                    <button
+                      type="button"
+                      disabled={reviewsPage <= 1}
+                      onClick={() => setReviewsPage((p) => p - 1)}
+                      className="px-3 py-1.5 rounded border border-border hover:bg-muted disabled:opacity-50 text-sm"
+                    >
+                      Trước
+                    </button>
+                    <span className="px-3 py-1.5 text-sm text-muted-foreground">
+                      {reviewsPage} / {reviewsTotalPages}
+                    </span>
+                    <button
+                      type="button"
+                      disabled={reviewsPage >= reviewsTotalPages}
+                      onClick={() => setReviewsPage((p) => p + 1)}
+                      className="px-3 py-1.5 rounded border border-border hover:bg-muted disabled:opacity-50 text-sm"
+                    >
+                      Sau
+                    </button>
+                  </div>
+                )}
+              </motion.div>
             </div>
 
-            {/* Sidebar - Level Info */}
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               whileInView={{ opacity: 1, y: 0 }}
@@ -467,20 +593,34 @@ export function CourseDetail() {
                 <div className="space-y-4">
                   <div className="flex items-center justify-between">
                     <span className="text-muted-foreground">Cấp độ</span>
-                    <span className="font-medium">{course.level}</span>
+                    <span className="font-medium">{formatLevel(course.level)}</span>
                   </div>
                   <div className="flex items-center justify-between">
                     <span className="text-muted-foreground">Tổng thời lượng</span>
-                    <span className="font-medium">{course.duration}</span>
+                    <span className="font-medium">{formatDuration(course.totalDuration)}</span>
                   </div>
                   <div className="flex items-center justify-between">
                     <span className="text-muted-foreground">Số bài học</span>
-                    <span className="font-medium">{course.lessons}</span>
+                    <span className="font-medium">{course.totalLessons || 0}</span>
                   </div>
                   <div className="flex items-center justify-between">
                     <span className="text-muted-foreground">Học viên</span>
-                    <span className="font-medium">{course.students.toLocaleString()}</span>
+                    <span className="font-medium">
+                      {(course.enrollmentCount || 0).toLocaleString()}
+                    </span>
                   </div>
+                  <a
+                    href="#reviews"
+                    className="flex items-center justify-between mt-3 pt-3 border-t border-border text-primary hover:underline"
+                  >
+                    <span className="flex items-center gap-1.5">
+                      <Star className="w-4 h-4 fill-yellow-500 text-yellow-500" />
+                      Đánh giá
+                    </span>
+                    <span className="font-medium">
+                      {(course.averageRating ?? 0).toFixed(1)} / 5
+                    </span>
+                  </a>
                 </div>
               </div>
 
@@ -496,7 +636,6 @@ export function CourseDetail() {
         </div>
       </section>
 
-      {/* Checkout Modal */}
       {showCheckout && (
         <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
           <motion.div
@@ -508,19 +647,23 @@ export function CourseDetail() {
             <h3 className="text-2xl font-bold mb-4">Thanh toán</h3>
             <div className="space-y-4 mb-6">
               <div className="flex items-center space-x-4">
-                <img src={course.image} alt={course.title} className="w-20 h-14 object-cover rounded" />
+                <img
+                  src={course.thumbnail || 'https://images.unsplash.com/photo-1516321318423-f06f85e504b3?w=800'}
+                  alt={course.title}
+                  className="w-20 h-14 object-cover rounded"
+                />
                 <div className="flex-1">
                   <h4 className="font-semibold line-clamp-2">{course.title}</h4>
                 </div>
               </div>
               <div className="border-t border-border pt-4">
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-muted-foreground">Giá gốc</span>
-                  <span className="line-through">{course.originalPrice?.toLocaleString('vi-VN')}đ</span>
-                </div>
                 <div className="flex items-center justify-between text-lg font-bold">
                   <span>Tổng cộng</span>
-                  <span className="text-primary">{course.price.toLocaleString('vi-VN')}đ</span>
+                  <span className="text-primary">
+                    {course.price === 0
+                      ? 'Miễn phí'
+                      : `${(course.price || 0).toLocaleString('vi-VN')}đ`}
+                  </span>
                 </div>
               </div>
             </div>
