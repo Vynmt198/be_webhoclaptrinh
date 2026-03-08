@@ -13,6 +13,7 @@ import {
   ShoppingCart,
   Loader2,
   Send,
+  Trash2,
 } from 'lucide-react';
 import { courseApi, reviewApi, Course, Lesson, type Review } from '@/app/lib/api';
 import { useCart } from '@/app/context/CartContext';
@@ -50,13 +51,17 @@ export function CourseDetail() {
   const fromState = (location.state as { from?: string } | null)?.from;
   const fromMyCourses = fromState === 'my-courses';
   const fromAdminCourses = fromState === 'admin-courses';
-  const backPath = fromAdminCourses ? '/admin/courses' : fromMyCourses ? '/my-courses' : '/courses';
-  const backLabel = fromAdminCourses ? 'Quay lại duyệt khóa học' : fromMyCourses ? 'Quay lại khóa học của tôi' : 'Quay lại khóa học';
+  const fromInstructorCourses = fromState === 'instructor-courses';
+  const backPath = fromAdminCourses ? '/admin/courses' : fromInstructorCourses ? '/instructor/courses' : fromMyCourses ? '/my-courses' : '/courses';
+  const backLabel = fromAdminCourses ? 'Quay lại duyệt khóa học' : fromInstructorCourses ? 'Quay lại khóa tôi dạy' : fromMyCourses ? 'Quay lại khóa học của tôi' : 'Quay lại khóa học';
   const [course, setCourse] = useState<Course | null>(null);
   const [curriculum, setCurriculum] = useState<Lesson[]>([]);
   const [reviews, setReviews] = useState<Review[]>([]);
   const [reviewsPage, setReviewsPage] = useState(1);
   const [reviewsTotalPages, setReviewsTotalPages] = useState(1);
+  type ReviewSort = 'newest' | 'highest' | 'lowest';
+  const [reviewsSort, setReviewsSort] = useState<ReviewSort>('newest');
+  const [deletingReviewId, setDeletingReviewId] = useState<string | null>(null);
   const [myReview, setMyReview] = useState<Review | null>(null);
   const [myReviewLoading, setMyReviewLoading] = useState(false);
   const [reviewForm, setReviewForm] = useState({ rating: 5, reviewText: '' });
@@ -82,14 +87,14 @@ export function CourseDetail() {
   useEffect(() => {
     if (!id) return;
     courseApi
-      .getReviews(id, { page: reviewsPage, limit: 5 })
+      .getReviews(id, { page: reviewsPage, limit: 5, sort: reviewsSort })
       .then((res) => {
         setReviews(res.data.reviews || []);
         const p = res.data.pagination;
         setReviewsTotalPages(p?.totalPages ?? (p?.total && p?.limit ? Math.ceil(p.total / p.limit) : 1));
       })
       .catch(() => setReviews([]));
-  }, [id, reviewsPage]);
+  }, [id, reviewsPage, reviewsSort]);
 
   useEffect(() => {
     if (!id || !user) {
@@ -116,11 +121,35 @@ export function CourseDetail() {
 
   const refetchReviews = () => {
     if (!id) return;
-    courseApi.getReviews(id, { page: reviewsPage, limit: 5 }).then((res) => {
+    courseApi.getReviews(id, { page: reviewsPage, limit: 5, sort: reviewsSort }).then((res) => {
       setReviews(res.data.reviews || []);
       const p = res.data.pagination;
       setReviewsTotalPages(p?.totalPages ?? (p?.total && p?.limit ? Math.ceil(p.total / p.limit) : 1));
     }).catch(() => {});
+  };
+
+  const handleDeleteReview = (review: Review) => {
+    const reviewUserId = review.userId?._id;
+    const canDelete = user && (reviewUserId === user._id || user.role === 'admin');
+    if (!canDelete) return;
+    if (!window.confirm('Bạn có chắc muốn xóa đánh giá này?')) return;
+    setDeletingReviewId(review._id);
+    reviewApi
+      .delete(review._id)
+      .then(() => {
+        toast.success('Đã xóa đánh giá.');
+        if (myReview?._id === review._id) {
+          setMyReview(null);
+          setReviewForm({ rating: 5, reviewText: '' });
+        }
+        refetchReviews();
+        if (id) courseApi.getById(id).then((r) => setCourse(r.data)).catch(() => {});
+        if (id && user) {
+          reviewApi.getMyReview(id).then((res) => setMyReview(res.data.review)).catch(() => setMyReview(null));
+        }
+      })
+      .catch((err: Error) => toast.error(err?.message || 'Không thể xóa đánh giá.'))
+      .finally(() => setDeletingReviewId(null));
   };
 
   const handleSubmitReview = (e: React.FormEvent) => {
@@ -342,8 +371,8 @@ export function CourseDetail() {
                     </>
                   )}
 
-                  {/* Admin không thấy nút mua/đăng ký */}
-                  {user?.role !== 'admin' && (
+                  {/* Chỉ learner (hoặc khách) thấy nút đăng ký / thêm giỏ; instructor và admin không thấy */}
+                  {user?.role !== 'admin' && user?.role !== 'instructor' && (
                     <>
                       <button
                         onClick={handleEnroll}
@@ -511,48 +540,85 @@ export function CourseDetail() {
                   </div>
                 )}
 
+                <div className="mb-4 flex items-center gap-2">
+                  <span className="text-sm text-muted-foreground">Sắp xếp:</span>
+                  <select
+                    value={reviewsSort}
+                    onChange={(e) => {
+                      setReviewsSort(e.target.value as ReviewSort);
+                      setReviewsPage(1);
+                    }}
+                    className="px-3 py-1.5 border border-border rounded-lg bg-background text-sm focus:ring-2 focus:ring-primary/50 outline-none"
+                  >
+                    <option value="newest">Mới nhất</option>
+                    <option value="highest">Cao nhất</option>
+                    <option value="lowest">Thấp nhất</option>
+                  </select>
+                </div>
+
                 <div className="space-y-4">
                   {reviews.length === 0 ? (
                     <p className="text-muted-foreground">Chưa có đánh giá nào.</p>
                   ) : (
-                    reviews.map((r) => (
-                      <div
-                        key={r._id}
-                        className="p-4 rounded-lg border border-border bg-muted/20"
-                      >
-                        <div className="flex items-center gap-3 mb-2">
-                          <img
-                            src={
-                              r.userId?.avatar ||
-                              `https://ui-avatars.com/api/?name=${encodeURIComponent(r.userId?.fullName || 'U')}&background=6b7280&color=fff`
-                            }
-                            alt=""
-                            className="w-10 h-10 rounded-full object-cover"
-                          />
-                          <div>
-                            <p className="font-medium">{r.userId?.fullName || 'Ẩn danh'}</p>
-                            <div className="flex items-center gap-1">
-                              {[1, 2, 3, 4, 5].map((i) => (
-                                <Star
-                                  key={i}
-                                  className={`w-4 h-4 ${
-                                    i <= (r.rating || 0)
-                                      ? 'fill-yellow-500 text-yellow-500'
-                                      : 'text-muted-foreground/30'
-                                  }`}
-                                />
-                              ))}
-                              <span className="text-sm text-muted-foreground ml-1">
-                                {r.rating}/5
-                              </span>
+                    reviews.map((r) => {
+                      const reviewUserId = r.userId?._id;
+                      const canDeleteReview = user && (reviewUserId === user._id || user.role === 'admin');
+                      return (
+                        <div
+                          key={r._id}
+                          className="p-4 rounded-lg border border-border bg-muted/20"
+                        >
+                          <div className="flex items-center justify-between gap-3 mb-2">
+                            <div className="flex items-center gap-3">
+                              <img
+                                src={
+                                  r.userId?.avatar ||
+                                  `https://ui-avatars.com/api/?name=${encodeURIComponent(r.userId?.fullName || 'U')}&background=6b7280&color=fff`
+                                }
+                                alt=""
+                                className="w-10 h-10 rounded-full object-cover"
+                              />
+                              <div>
+                                <p className="font-medium">{r.userId?.fullName || 'Ẩn danh'}</p>
+                                <div className="flex items-center gap-1">
+                                  {[1, 2, 3, 4, 5].map((i) => (
+                                    <Star
+                                      key={i}
+                                      className={`w-4 h-4 ${
+                                        i <= (r.rating || 0)
+                                          ? 'fill-yellow-500 text-yellow-500'
+                                          : 'text-muted-foreground/30'
+                                      }`}
+                                    />
+                                  ))}
+                                  <span className="text-sm text-muted-foreground ml-1">
+                                    {r.rating}/5
+                                  </span>
+                                </div>
+                              </div>
                             </div>
+                            {canDeleteReview && (
+                              <button
+                                type="button"
+                                onClick={() => handleDeleteReview(r)}
+                                disabled={deletingReviewId === r._id}
+                                className="p-2 text-destructive hover:bg-destructive/10 rounded-lg transition-colors disabled:opacity-50"
+                                title="Xóa đánh giá"
+                              >
+                                {deletingReviewId === r._id ? (
+                                  <Loader2 className="w-4 h-4 animate-spin" />
+                                ) : (
+                                  <Trash2 className="w-4 h-4" />
+                                )}
+                              </button>
+                            )}
                           </div>
+                          {(r.reviewText ?? r.comment) && (
+                            <p className="text-muted-foreground text-sm pl-12">{r.reviewText ?? r.comment}</p>
+                          )}
                         </div>
-                        {(r.reviewText ?? r.comment) && (
-                          <p className="text-muted-foreground text-sm pl-12">{r.reviewText ?? r.comment}</p>
-                        )}
-                      </div>
-                    ))
+                      );
+                    })
                   )}
                 </div>
                 {reviewsTotalPages > 1 && (

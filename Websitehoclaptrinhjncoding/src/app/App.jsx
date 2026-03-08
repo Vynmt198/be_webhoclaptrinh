@@ -32,6 +32,7 @@ import { InstructorCourses } from '@/app/pages/instructor/InstructorCourses';
 import { InstructorCourseCreate } from '@/app/pages/instructor/InstructorCourseCreate';
 import { InstructorCourseEdit } from '@/app/pages/instructor/InstructorCourseEdit';
 import { InstructorAnalytics } from '@/app/pages/instructor/InstructorAnalytics';
+import { InstructorAnalyticsList } from '@/app/pages/instructor/InstructorAnalyticsList';
 export default function App() {
   return (
     <BrowserRouter>
@@ -67,6 +68,7 @@ export default function App() {
                 <Route path="courses" element={<InstructorCourses />} />
                 <Route path="courses/new" element={<InstructorCourseCreate />} />
                 <Route path="courses/:id/edit" element={<InstructorCourseEdit />} />
+                <Route path="analytics" element={<InstructorAnalyticsList />} />
                 <Route path="analytics/:id" element={<InstructorAnalytics />} />
               </Route>
             </Route>
