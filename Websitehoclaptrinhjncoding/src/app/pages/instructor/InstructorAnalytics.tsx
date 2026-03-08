@@ -87,15 +87,6 @@ export function InstructorAnalytics() {
           </motion.div>
         ))}
       </div>
-
-      <div className="pt-4">
-        <Link
-          to={`/courses/${id}`}
-          className="text-primary hover:underline"
-        >
-          Xem chi tiết khóa học →
-        </Link>
-      </div>
     </div>
   );
 }
