@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { motion } from 'motion/react';
 import { Mail, Lock, Eye, EyeOff, Code2, ArrowRight, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
@@ -7,6 +7,7 @@ import { useAuth } from '@/app/context/AuthContext';
 
 export function Login() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { login } = useAuth();
   const [searchParams] = useSearchParams();
   const [showPassword, setShowPassword] = useState(false);
@@ -24,9 +25,14 @@ export function Login() {
     e.preventDefault();
     setIsLoading(true);
     try {
-      await login(email, password);
+      const user = await login(email, password);
       toast.success('Đăng nhập thành công!');
-      navigate('/my-courses');
+      if (user?.role === 'instructor' || user?.role === 'admin') {
+        navigate(user?.role === 'admin' ? '/admin' : '/instructor', { replace: true });
+      } else {
+        const from = (location.state as { from?: string })?.from;
+        navigate(from || '/my-courses', { replace: true });
+      }
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Đăng nhập thất bại.';
       toast.error(message);
