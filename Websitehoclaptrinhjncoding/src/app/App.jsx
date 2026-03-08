@@ -17,6 +17,7 @@ import { AuthCallback } from '@/app/pages/AuthCallback';
 import { Cart } from '@/app/pages/Cart';
 import { Checkout } from '@/app/pages/Checkout';
 import { OrderSuccess } from '@/app/pages/OrderSuccess';
+import { PaymentReturn } from '@/app/pages/PaymentReturn';
 import { About } from '@/app/pages/About';
 import { Contact } from '@/app/pages/Contact';
 import { FAQ } from '@/app/pages/FAQ';
@@ -85,6 +86,9 @@ export default function App() {
 
             {/* Success Route (No Layout) */}
             <Route path="order-success" element={<OrderSuccess />} />
+
+            {/* VNPay return: sau khi thanh toán VNPay redirect về đây, gọi API và hiển thị trạng thái */}
+            <Route path="payment/return" element={<PaymentReturn />} />
 
             {/* 404 Route */}
             <Route path="*" element={<NotFound />} />

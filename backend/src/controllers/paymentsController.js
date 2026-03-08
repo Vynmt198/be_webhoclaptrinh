@@ -5,7 +5,7 @@ const vnpayService = require('../services/vnpayService');
 
 exports.createPayment = async (req, res, next) => {
     try {
-        const { amount, courseId } = req.body;
+        const { amount, courseId, courseIds } = req.body;
         const userId = req.user._id;
 
         const orderId = `${Date.now()}_${userId}`;
@@ -17,11 +17,14 @@ exports.createPayment = async (req, res, next) => {
         console.log('Creating payment with IP:', ipAddr);
 
         let orderInfo = 'Thanh toán';
-        if (courseId) {
-            const course = await Course.findById(courseId);
+        const ids = Array.isArray(courseIds) && courseIds.length > 0 ? courseIds : (courseId ? [courseId] : []);
+        if (ids.length === 1) {
+            const course = await Course.findById(ids[0]);
             if (course) {
                 orderInfo = `Thanh toan khoa hoc: ${course.title}`;
             }
+        } else if (ids.length > 1) {
+            orderInfo = 'Thanh toan gio hang';
         }
 
         const payment = await Payment.create({
@@ -29,7 +32,8 @@ exports.createPayment = async (req, res, next) => {
             orderId,
             amount,
             orderInfo,
-            courseId: courseId || null,
+            courseId: ids[0] || null,
+            courseIds: ids.length > 0 ? ids : undefined,
         });
 
         const paymentUrl = vnpayService.createPaymentUrl(
@@ -87,13 +91,21 @@ exports.vnpayReturn = async (req, res, next) => {
         if (responseCode === '00') {
             payment.paymentStatus = 'success';
 
-            if (payment.courseId) {
-                const enrollment = await Enrollment.findOneAndUpdate(
-                    { userId: payment.userId, courseId: payment.courseId },
+            const courseIdsToEnroll = payment.courseIds?.length
+                ? payment.courseIds
+                : payment.courseId
+                    ? [payment.courseId]
+                    : [];
+            for (const cid of courseIdsToEnroll) {
+                await Enrollment.findOneAndUpdate(
+                    { userId: payment.userId, courseId: cid },
                     { status: 'active' },
                     { upsert: true, new: true }
                 );
-                payment.enrollmentId = enrollment._id;
+            }
+            if (payment.courseId && !payment.enrollmentId) {
+                const enrollment = await Enrollment.findOne({ userId: payment.userId, courseId: payment.courseId });
+                if (enrollment) payment.enrollmentId = enrollment._id;
             }
         } else {
             payment.paymentStatus = 'failed';
@@ -109,6 +121,7 @@ exports.vnpayReturn = async (req, res, next) => {
                 amount: payment.amount,
                 status: payment.paymentStatus,
                 transactionNo: payment.transactionNo,
+                responseCode: responseCode || req.query.vnp_ResponseCode,
             },
         });
     } catch (error) {
@@ -150,13 +163,21 @@ exports.vnpayIPN = async (req, res, next) => {
             payment.cardType = vnp_Params.vnp_CardType;
             payment.vnpayData = vnp_Params;
 
-            if (payment.courseId) {
-                const enrollment = await Enrollment.findOneAndUpdate(
-                    { userId: payment.userId, courseId: payment.courseId },
+            const courseIdsToEnroll = payment.courseIds?.length
+                ? payment.courseIds
+                : payment.courseId
+                    ? [payment.courseId]
+                    : [];
+            for (const cid of courseIdsToEnroll) {
+                await Enrollment.findOneAndUpdate(
+                    { userId: payment.userId, courseId: cid },
                     { status: 'active' },
                     { upsert: true, new: true }
                 );
-                payment.enrollmentId = enrollment._id;
+            }
+            if (payment.courseId && !payment.enrollmentId) {
+                const enrollment = await Enrollment.findOne({ userId: payment.userId, courseId: payment.courseId });
+                if (enrollment) payment.enrollmentId = enrollment._id;
             }
 
             await payment.save();

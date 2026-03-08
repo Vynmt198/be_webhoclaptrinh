@@ -1,10 +1,16 @@
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { motion } from 'motion/react';
-import { ShoppingCart, X, ArrowRight, ShoppingBag } from 'lucide-react';
+import { ShoppingCart, X, ArrowRight, ShoppingBag, Loader2 } from 'lucide-react';
 import { useCart } from '@/app/context/CartContext';
+import { useAuth } from '@/app/context/AuthContext';
+import { paymentsApi } from '@/app/lib/api';
+import { toast } from 'sonner';
 
 export function Cart() {
   const { items, removeFromCart, getTotalPrice } = useCart();
+  const { user } = useAuth();
+  const [submitting, setSubmitting] = useState(false);
   const total = getTotalPrice();
   const discount = total > 0 ? Math.round(total * 0.1) : 0; // 10% discount
   const finalTotal = total - discount;
@@ -133,13 +139,49 @@ export function Cart() {
                 </div>
               </div>
 
-              <Link
-                to="/checkout"
-                className="w-full py-4 bg-gradient-to-r from-blue-600 via-indigo-500 to-blue-500 text-white rounded-lg hover:shadow-2xl hover:shadow-blue-500/30 transition-all font-semibold flex items-center justify-center space-x-2 mb-3 btn-shine border-2 border-blue-500/20 hover:scale-[1.02] active:scale-95"
+              <button
+                type="button"
+                disabled={submitting}
+                onClick={async () => {
+                  if (!user) {
+                    toast.error('Vui lòng đăng nhập để thanh toán.');
+                    return;
+                  }
+                  if (items.length === 0) return;
+                  setSubmitting(true);
+                  try {
+                    const courseIds = items.map((item) => item.id);
+                    const res = await paymentsApi.createPaymentFromCart(courseIds, finalTotal);
+                    const paymentUrl =
+                      res?.data?.paymentUrl ??
+                      (res as { data?: { paymentUrl?: string } })?.data?.paymentUrl;
+                    if (paymentUrl) {
+                      window.location.assign(paymentUrl);
+                      return;
+                    }
+                    toast.error('Không tạo được link thanh toán.');
+                  } catch (e) {
+                    toast.error(
+                      e instanceof Error ? e.message : 'Lỗi khi tạo thanh toán.'
+                    );
+                  } finally {
+                    setSubmitting(false);
+                  }
+                }}
+                className="w-full py-4 bg-gradient-to-r from-blue-600 via-indigo-500 to-blue-500 text-white rounded-lg hover:shadow-2xl hover:shadow-blue-500/30 transition-all font-semibold flex items-center justify-center space-x-2 mb-3 btn-shine border-2 border-blue-500/20 hover:scale-[1.02] active:scale-95 disabled:opacity-70 disabled:cursor-not-allowed"
               >
-                <span>Thanh toán</span>
-                <ArrowRight className="w-5 h-5" />
-              </Link>
+                {submitting ? (
+                  <>
+                    <Loader2 className="w-5 h-5 animate-spin" />
+                    <span>Đang chuyển đến VNPay...</span>
+                  </>
+                ) : (
+                  <>
+                    <span>Thanh toán</span>
+                    <ArrowRight className="w-5 h-5" />
+                  </>
+                )}
+              </button>
 
               <Link
                 to="/courses"

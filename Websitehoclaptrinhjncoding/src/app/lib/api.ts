@@ -269,6 +269,34 @@ export const uploadApi = {
     thumbnail: (file: File) => uploadFile('/upload/thumbnail', file),
 };
 
+export type VnpayReturnResponse = {
+    success: boolean;
+    message: string;
+    data?: {
+        orderId: string;
+        amount: number;
+        status: string;
+        transactionNo?: string;
+        responseCode?: string;
+    };
+};
+
+export const paymentsApi = {
+    createPayment: (courseId: string, amount: number) =>
+        request<{ success: boolean; data: { paymentUrl: string; orderId: string } }>('/payments/create', {
+            method: 'POST',
+            body: { courseId, amount },
+        }),
+    createPaymentFromCart: (courseIds: string[], amount: number) =>
+        request<{ success: boolean; data: { paymentUrl: string; orderId: string } }>('/payments/create', {
+            method: 'POST',
+            body: { courseIds, amount },
+        }),
+    /** GET vnpay-return with query string from VNPay redirect. No auth. */
+    getVnpayReturn: (queryString: string) =>
+        request<VnpayReturnResponse>(`/payments/vnpay-return${queryString.startsWith('?') ? queryString : `?${queryString}`}`),
+};
+
 export const reviewApi = {
     getMyReview: (courseId: string) =>
         request<{ success: boolean; data: { review: Review } }>(`/reviews/my-review/${courseId}`),

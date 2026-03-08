@@ -15,7 +15,7 @@ import {
   Send,
   Trash2,
 } from 'lucide-react';
-import { courseApi, reviewApi, Course, Lesson, type Review, type RatingSummary as RatingSummaryType } from '@/app/lib/api';
+import { courseApi, reviewApi, paymentsApi, Course, Lesson, type Review, type RatingSummary as RatingSummaryType } from '@/app/lib/api';
 import { useCart } from '@/app/context/CartContext';
 import { useAuth } from '@/app/context/AuthContext';
 import { toast } from 'sonner';
@@ -201,18 +201,40 @@ export function CourseDetail() {
     }
   };
 
-  const handleEnroll = () => {
+  const handleEnroll = async () => {
     if (!course) return;
-    const cartItem = {
-      id: course._id,
-      title: course.title,
-      price: course.price,
-      image:
-        course.thumbnail ||
-        'https://images.unsplash.com/photo-1516321318423-f06f85e504b3?w=800',
-    };
-    addToCart(cartItem);
-    navigate('/checkout');
+    if (!user) {
+      toast.error('Vui lòng đăng nhập để đăng ký khóa học.');
+      return;
+    }
+    const amount = Number(course.price) ?? 0;
+    if (amount <= 0) {
+      const cartItem = {
+        id: course._id,
+        title: course.title,
+        price: course.price,
+        image:
+          course.thumbnail ||
+          'https://images.unsplash.com/photo-1516321318423-f06f85e504b3?w=800',
+      };
+      addToCart(cartItem);
+      navigate('/checkout');
+      return;
+    }
+    setSubmitting(true);
+    try {
+      const res = await paymentsApi.createPayment(course._id, amount);
+      const paymentUrl = res?.data?.paymentUrl ?? (res as { data?: { paymentUrl?: string } })?.data?.paymentUrl;
+      if (paymentUrl) {
+        window.location.assign(paymentUrl);
+        return;
+      }
+      toast.error('Không tạo được link thanh toán.');
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Lỗi khi tạo thanh toán.');
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   const handleAddToCart = () => {
@@ -391,11 +413,22 @@ export function CourseDetail() {
                   {user?.role !== 'admin' && user?.role !== 'instructor' && (
                     <>
                       <button
+                        type="button"
                         onClick={handleEnroll}
-                        className="w-full py-4 bg-gradient-to-r from-blue-600 via-indigo-500 to-blue-500 text-white rounded-lg hover:shadow-2xl hover:shadow-blue-500/30 transition-all font-semibold flex items-center justify-center space-x-2 mb-3 btn-shine border-2 border-blue-500/20 hover:scale-[1.02] active:scale-95"
+                        disabled={submitting}
+                        className="w-full py-4 bg-gradient-to-r from-blue-600 via-indigo-500 to-blue-500 text-white rounded-lg hover:shadow-2xl hover:shadow-blue-500/30 transition-all font-semibold flex items-center justify-center space-x-2 mb-3 btn-shine border-2 border-blue-500/20 hover:scale-[1.02] active:scale-95 disabled:opacity-70 disabled:cursor-not-allowed"
                       >
-                        <ShoppingCart className="w-5 h-5" />
-                        <span>Đăng ký ngay</span>
+                        {submitting ? (
+                          <>
+                            <Loader2 className="w-5 h-5 animate-spin" />
+                            <span>Đang chuyển đến VNPay...</span>
+                          </>
+                        ) : (
+                          <>
+                            <ShoppingCart className="w-5 h-5" />
+                            <span>Đăng ký ngay</span>
+                          </>
+                        )}
                       </button>
 
                       <button
@@ -743,8 +776,45 @@ export function CourseDetail() {
                 </div>
               </div>
             </div>
-            <button className="w-full py-3 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors font-semibold mb-3">
-              Xác nhận thanh toán
+            <button
+              type="button"
+              disabled={submitting || !course}
+              onClick={async () => {
+                if (!user) {
+                  toast.error('Vui lòng đăng nhập để thanh toán.');
+                  return;
+                }
+                if (!course) return;
+                const amount = Number(course.price) ?? 0;
+                if (amount <= 0) {
+                  toast.info('Khóa học miễn phí, không cần thanh toán.');
+                  return;
+                }
+                setSubmitting(true);
+                try {
+                  const res = await paymentsApi.createPayment(course._id, amount);
+                  const paymentUrl = res?.data?.paymentUrl ?? (res as { data?: { paymentUrl?: string } })?.data?.paymentUrl;
+                  if (paymentUrl) {
+                    window.location.assign(paymentUrl);
+                    return;
+                  }
+                  toast.error('Không tạo được link thanh toán.');
+                } catch (e) {
+                  toast.error(e instanceof Error ? e.message : 'Lỗi khi tạo thanh toán.');
+                } finally {
+                  setSubmitting(false);
+                }
+              }}
+              className="w-full py-3 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors font-semibold mb-3 disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+            >
+              {submitting ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  Đang chuyển hướng...
+                </>
+              ) : (
+                'Xác nhận thanh toán'
+              )}
             </button>
             <button
               onClick={() => setShowCheckout(false)}

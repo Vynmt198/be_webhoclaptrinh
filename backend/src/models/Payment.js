@@ -12,6 +12,11 @@ const paymentSchema = new mongoose.Schema(
             ref: 'Course',
             default: null,
         },
+        courseIds: {
+            type: [mongoose.Schema.Types.ObjectId],
+            ref: 'Course',
+            default: undefined,
+        },
         enrollmentId: {
             type: mongoose.Schema.Types.ObjectId,
             ref: 'Enrollment',
@@ -57,7 +62,6 @@ const paymentSchema = new mongoose.Schema(
 );
 
 paymentSchema.index({ userId: 1, createdAt: -1 });
-paymentSchema.index({ orderId: 1 });
 paymentSchema.index({ courseId: 1 });
 paymentSchema.index({ paymentStatus: 1 });
 
