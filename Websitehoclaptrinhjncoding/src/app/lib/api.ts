@@ -193,6 +193,18 @@ export interface Review {
     createdAt?: string;
 }
 
+export interface RatingSummary {
+    averageRating: number;
+    totalReviews: number;
+    distribution: {
+        oneStar: number;
+        twoStars: number;
+        threeStars: number;
+        fourStars: number;
+        fiveStars: number;
+    };
+}
+
 export const courseApi = {
     list: (params?: { page?: number; limit?: number; sortBy?: string }) => {
         const q = new URLSearchParams(
@@ -243,6 +255,8 @@ export const courseApi = {
             `/courses/${id}/reviews${q ? `?${q}` : ''}`
         );
     },
+    getRatingSummary: (id: string) =>
+        request<{ success: boolean; data: RatingSummary }>(`/courses/${id}/rating-summary`),
     create: (payload: { title: string; description?: string; syllabus?: string; categoryId?: string; level?: string; price?: number; thumbnail?: string; estimatedCompletionHours?: number }) =>
         request<{ success: boolean; data: Course }>('/courses', { method: 'POST', body: payload as Record<string, unknown> }),
     update: (id: string, payload: Partial<{ title: string; description: string; syllabus: string; categoryId: string | null; level: string; price: number; thumbnail: string | null; estimatedCompletionHours: number; submitForReview: boolean }>) =>

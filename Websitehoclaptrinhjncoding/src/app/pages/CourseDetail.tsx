@@ -15,10 +15,11 @@ import {
   Send,
   Trash2,
 } from 'lucide-react';
-import { courseApi, reviewApi, Course, Lesson, type Review } from '@/app/lib/api';
+import { courseApi, reviewApi, Course, Lesson, type Review, type RatingSummary as RatingSummaryType } from '@/app/lib/api';
 import { useCart } from '@/app/context/CartContext';
 import { useAuth } from '@/app/context/AuthContext';
 import { toast } from 'sonner';
+import { RatingSummary } from '@/app/components/RatingSummary';
 
 function formatLevel(level?: string) {
   if (!level) return '-';
@@ -66,6 +67,8 @@ export function CourseDetail() {
   const [myReviewLoading, setMyReviewLoading] = useState(false);
   const [reviewForm, setReviewForm] = useState({ rating: 5, reviewText: '' });
   const [submittingReview, setSubmittingReview] = useState(false);
+  const [ratingSummary, setRatingSummary] = useState<RatingSummaryType | null>(null);
+  const [ratingSummaryLoading, setRatingSummaryLoading] = useState(false);
   const [loading, setLoading] = useState(true);
   const [showCheckout, setShowCheckout] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -95,6 +98,17 @@ export function CourseDetail() {
       })
       .catch(() => setReviews([]));
   }, [id, reviewsPage, reviewsSort]);
+
+  // Fetch rating summary for distribution chart
+  useEffect(() => {
+    if (!id) return;
+    setRatingSummaryLoading(true);
+    courseApi
+      .getRatingSummary(id)
+      .then((res) => setRatingSummary(res.data))
+      .catch(() => setRatingSummary(null))
+      .finally(() => setRatingSummaryLoading(false));
+  }, [id]);
 
   useEffect(() => {
     if (!id || !user) {
@@ -126,6 +140,8 @@ export function CourseDetail() {
       const p = res.data.pagination;
       setReviewsTotalPages(p?.totalPages ?? (p?.total && p?.limit ? Math.ceil(p.total / p.limit) : 1));
     }).catch(() => {});
+    // Also refresh rating summary
+    courseApi.getRatingSummary(id).then((res) => setRatingSummary(res.data)).catch(() => {});
   };
 
   const handleDeleteReview = (review: Review) => {
@@ -470,16 +486,10 @@ export function CourseDetail() {
                 className="bg-card border border-border rounded-xl p-6 scroll-mt-24"
               >
                 <h2 className="text-2xl font-bold mb-4">Đánh giá & xếp hạng</h2>
-                <div className="flex items-center gap-4 mb-6">
-                  <div className="flex items-center gap-1">
-                    <Star className="w-8 h-8 fill-yellow-500 text-yellow-500" />
-                    <span className="text-2xl font-bold">
-                      {(course.averageRating ?? 0).toFixed(1)}
-                    </span>
-                  </div>
-                  <span className="text-muted-foreground">
-                    (từ khóa học)
-                  </span>
+                
+                {/* Rating Summary Component (FE-REVIEW-04) */}
+                <div className="mb-6">
+                  <RatingSummary data={ratingSummary} loading={ratingSummaryLoading} />
                 </div>
 
                 {user && !isOwner && (

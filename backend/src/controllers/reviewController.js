@@ -269,10 +269,35 @@ const syncCourseRating = async (courseId) => {
     }
 };
 
+/**
+ * GET /api/courses/:id/rating-summary
+ * Get rating distribution and summary for a course
+ * @access Public
+ */
+const getRatingSummary = async (req, res, next) => {
+    try {
+        const courseId = req.params.id || req.params.courseId;
+
+        const stats = await calculateCourseRatingStats(courseId);
+
+        return res.status(200).json({
+            success: true,
+            data: {
+                averageRating: Math.round(stats.averageRating * 10) / 10,
+                totalReviews: stats.totalReviews,
+                distribution: stats.distribution,
+            },
+        });
+    } catch (error) {
+        next(error);
+    }
+};
+
 module.exports = {
     getCourseReviews,
     getUserReviewForCourse,
     createReview,
     updateReview,
     deleteReview,
+    getRatingSummary,
 };
