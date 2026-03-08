@@ -1,8 +1,8 @@
 import { Link } from 'react-router-dom';
 import { motion, useInView } from 'motion/react';
 import { Code2, BookOpen, Users, Award, ArrowRight, Play, Star, TrendingUp, X } from 'lucide-react';
-import { useRef, useState } from 'react';
-import { courses } from '@/app/data/courses';
+import { useRef, useState, useEffect } from 'react';
+import { courseApi } from '@/app/lib/api';
 
 const fadeInUp = {
   initial: { opacity: 0, y: 60 },
@@ -36,8 +36,14 @@ function AnimatedSection({ children, className = '' }: { children: React.ReactNo
 }
 
 export function Home() {
-  const featuredCourses = courses.slice(0, 3);
+  const [featuredCourses, setFeaturedCourses] = useState<any[]>([]);
   const [showDemoModal, setShowDemoModal] = useState(false);
+
+  useEffect(() => {
+    courseApi.list({ limit: 3, sortBy: 'popular' })
+      .then(res => setFeaturedCourses(res.data.courses || []))
+      .catch(console.error);
+  }, []);
 
   return (
     <div className="min-h-screen">
@@ -46,10 +52,10 @@ export function Home() {
         {/* Animated background elements - Blue/Red Gradient Theme */}
         <div className="absolute inset-0 overflow-hidden">
           {/* Blue blob - top right */}
-          <motion.div 
+          <motion.div
             className="absolute -top-40 -right-40 w-96 h-96 rounded-full blur-3xl"
             style={{ background: 'radial-gradient(circle, rgba(59, 130, 246, 0.3) 0%, rgba(37, 99, 235, 0.2) 40%, transparent 70%)' }}
-            animate={{ 
+            animate={{
               scale: [1, 1.2, 1],
               opacity: [0.3, 0.5, 0.3],
               x: [0, 30, 0],
@@ -57,24 +63,24 @@ export function Home() {
             }}
             transition={{ duration: 8, repeat: Infinity, ease: "easeInOut" }}
           />
-          
+
           {/* Purple blob - center */}
-          <motion.div 
+          <motion.div
             className="absolute top-1/3 left-1/2 -translate-x-1/2 w-[500px] h-[500px] rounded-full blur-3xl"
             style={{ background: 'radial-gradient(circle, rgba(124, 58, 237, 0.2) 0%, rgba(219, 39, 119, 0.15) 50%, transparent 70%)' }}
-            animate={{ 
+            animate={{
               scale: [1, 1.3, 1],
               opacity: [0.2, 0.4, 0.2],
               rotate: [0, 90, 0]
             }}
             transition={{ duration: 12, repeat: Infinity, ease: "easeInOut", delay: 1 }}
           />
-          
+
           {/* Red blob - bottom left */}
-          <motion.div 
+          <motion.div
             className="absolute top-60 -left-40 w-[450px] h-[450px] rounded-full blur-3xl"
             style={{ background: 'radial-gradient(circle, rgba(220, 38, 38, 0.25) 0%, rgba(239, 68, 68, 0.15) 50%, transparent 70%)' }}
-            animate={{ 
+            animate={{
               scale: [1, 1.3, 1],
               opacity: [0.2, 0.35, 0.2],
               x: [0, -30, 0],
@@ -82,12 +88,12 @@ export function Home() {
             }}
             transition={{ duration: 10, repeat: Infinity, ease: "easeInOut", delay: 2 }}
           />
-          
+
           {/* Orange accent - bottom right */}
-          <motion.div 
+          <motion.div
             className="absolute bottom-0 right-0 w-80 h-80 rounded-full blur-3xl"
             style={{ background: 'radial-gradient(circle, rgba(234, 88, 12, 0.2) 0%, rgba(249, 115, 22, 0.1) 50%, transparent 70%)' }}
-            animate={{ 
+            animate={{
               scale: [1, 1.4, 1],
               opacity: [0.15, 0.3, 0.15]
             }}
@@ -139,7 +145,7 @@ export function Home() {
                 initial={{ opacity: 0, scale: 0.9 }}
                 animate={{ opacity: 1, scale: 1 }}
                 transition={{ delay: 0.6, duration: 0.6 }}
-                className="flex flex-wrap gap-4 justify-center md:justify-start"
+                className="flex flex-wrap gap-4 justify-center "
               >
                 <Link
                   to="/courses"
@@ -148,7 +154,7 @@ export function Home() {
                   <span>Khám phá khóa học</span>
                   <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
                 </Link>
-                <button 
+                <button
                   onClick={() => setShowDemoModal(true)}
                   className="group px-8 py-4 bg-gradient-to-r from-red-600 via-rose-600 to-orange-600 text-white rounded-lg hover:shadow-2xl hover:shadow-red-500/30 transition-all flex items-center justify-center space-x-2 hover:scale-105 active:scale-95 btn-shine border-2 border-red-500/20"
                 >
@@ -224,27 +230,26 @@ export function Home() {
                 transition={{ duration: 0.3 }}
               >
                 <Link
-                  to={`/courses/${course.id}`}
+                  to={`/courses/${course._id}`}
                   className="group block bg-card border border-border hover:border-primary/50 rounded-xl overflow-hidden transition-all shadow-lg hover:shadow-xl hover:shadow-primary/10"
                 >
                   <div className="relative overflow-hidden aspect-video">
                     <img
-                      src={course.image}
+                      src={course.thumbnail || 'https://images.unsplash.com/photo-1542831371-29b0f74f9713?auto=format&fit=crop&w=800&q=80'}
                       alt={course.title}
                       className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
                     />
                     <div className="absolute top-3 right-3 px-3 py-1 bg-primary text-primary-foreground rounded-full text-sm font-medium">
-                      {course.level}
+                      {course.level === 'beginner' ? 'Cơ bản' : course.level === 'intermediate' ? 'Trung cấp' : 'Nâng cao'}
                     </div>
                   </div>
 
                   <div className="p-6">
                     <div className="flex items-center justify-between mb-3">
-                      <span className="text-sm text-primary font-medium">{course.category}</span>
+                      <span className="text-sm text-primary font-medium">{course.categoryId?.name || 'Lập trình'}</span>
                       <div className="flex items-center space-x-1">
                         <Star className="w-4 h-4 fill-yellow-500 text-yellow-500" />
-                        <span className="text-sm font-medium">{course.rating}</span>
-                        <span className="text-sm text-muted-foreground">({course.students})</span>
+                        <span className="text-sm font-medium">{course.averageRating || 0}</span>
                       </div>
                     </div>
 
@@ -258,18 +263,17 @@ export function Home() {
 
                     <div className="flex items-center justify-between pt-4 border-t border-border">
                       <div className="flex items-center space-x-4 text-sm text-muted-foreground">
-                        <span>{course.lessons} bài học</span>
-                        <span>{course.duration}</span>
+                        <span>{course.totalLessons || 0} bài học</span>
+                        <span>{course.instructorId?.fullName || ''}</span>
                       </div>
                       <div className="text-right">
-                        {course.originalPrice && (
-                          <div className="text-sm text-muted-foreground line-through">
-                            {course.originalPrice.toLocaleString('vi-VN')}đ
+                        {course.price === 0 ? (
+                          <div className="text-lg font-bold text-primary">Miễn phí</div>
+                        ) : (
+                          <div className="text-lg font-bold text-primary">
+                            {course.price?.toLocaleString('vi-VN')}đ
                           </div>
                         )}
-                        <div className="text-lg font-bold text-primary">
-                          {course.price.toLocaleString('vi-VN')}đ
-                        </div>
                       </div>
                     </div>
                   </div>
