@@ -27,6 +27,11 @@ import { AdminUsers } from '@/app/pages/admin/AdminUsers';
 import { AdminCourses } from '@/app/pages/admin/AdminCourses';
 import { AdminContent } from '@/app/pages/admin/AdminContent';
 import { AdminAnalytics } from '@/app/pages/admin/AdminAnalytics';
+import { InstructorLayout } from '@/app/pages/instructor/InstructorLayout';
+import { InstructorCourses } from '@/app/pages/instructor/InstructorCourses';
+import { InstructorCourseCreate } from '@/app/pages/instructor/InstructorCourseCreate';
+import { InstructorCourseEdit } from '@/app/pages/instructor/InstructorCourseEdit';
+import { InstructorAnalytics } from '@/app/pages/instructor/InstructorAnalytics';
 export default function App() {
   return (
     <BrowserRouter>
@@ -54,6 +59,15 @@ export default function App() {
                 <Route path="users" element={<AdminUsers />} />
                 <Route path="courses" element={<AdminCourses />} />
                 <Route path="content" element={<AdminContent />} />
+              </Route>
+
+              {/* Instructor Routes */}
+              <Route path="instructor" element={<InstructorLayout />}>
+                <Route index element={<Navigate to="courses" replace />} />
+                <Route path="courses" element={<InstructorCourses />} />
+                <Route path="courses/new" element={<InstructorCourseCreate />} />
+                <Route path="courses/:id/edit" element={<InstructorCourseEdit />} />
+                <Route path="analytics/:id" element={<InstructorAnalytics />} />
               </Route>
             </Route>
 

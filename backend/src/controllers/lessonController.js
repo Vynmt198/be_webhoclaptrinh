@@ -54,6 +54,17 @@ const updateLesson = async (req, res, next) => {
     }
 };
 
+const getLessonById = async (req, res, next) => {
+    try {
+        // isLessonOwner already loaded and validated req.lesson
+        const lesson = req.lesson?.toObject ? req.lesson.toObject() : req.lesson;
+        if (!lesson) return res.status(404).json({ success: false, message: 'Lesson not found.' });
+        return res.status(200).json({ success: true, data: lesson });
+    } catch (error) {
+        next(error);
+    }
+};
+
 const deleteLesson = async (req, res, next) => {
     try {
         const courseId = req.lesson.courseId;
@@ -86,6 +97,7 @@ const reorderLessons = async (req, res, next) => {
 };
 
 module.exports = {
+    getLessonById,
     createLesson,
     updateLesson,
     deleteLesson,

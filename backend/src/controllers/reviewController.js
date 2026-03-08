@@ -30,6 +30,7 @@ const getCourseReviews = async (req, res, next) => {
 
         const total = await Review.countDocuments({ courseId });
 
+        const totalPages = Math.ceil(total / limitNumber);
         return res.status(200).json({
             success: true,
             data: {
@@ -38,7 +39,8 @@ const getCourseReviews = async (req, res, next) => {
                     total,
                     page: pageNumber,
                     limit: limitNumber,
-                    pages: Math.ceil(total / limitNumber),
+                    totalPages,
+                    pages: totalPages,
                 },
             },
         });

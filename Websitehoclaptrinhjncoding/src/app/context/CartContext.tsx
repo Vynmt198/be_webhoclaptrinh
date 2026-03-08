@@ -1,18 +1,34 @@
-import { createContext, useContext, useState } from "react";
+import { createContext, useContext, useState, ReactNode } from "react";
 
-const CartContext = createContext(null);
+export interface CartItem {
+  id: string;
+  title: string;
+  price: number;
+  image?: string;
+}
 
-export function CartProvider({ children }) {
-  const [items, setItems] = useState([]);
+interface CartContextValue {
+  items: CartItem[];
+  addToCart: (course: CartItem) => void;
+  removeFromCart: (id: string) => void;
+  clearCart: () => void;
+  getTotalPrice: () => number;
+  getItemCount: () => number;
+}
 
-  const addToCart = (course) => {
+const CartContext = createContext<CartContextValue | null>(null);
+
+export function CartProvider({ children }: { children: ReactNode }) {
+  const [items, setItems] = useState<CartItem[]>([]);
+
+  const addToCart = (course: CartItem) => {
     setItems((prev) => {
       if (prev.some((c) => c.id === course.id)) return prev;
       return [...prev, course];
     });
   };
 
-  const removeFromCart = (id) =>
+  const removeFromCart = (id: string) =>
     setItems((prev) => prev.filter((c) => c.id !== id));
 
   const clearCart = () => setItems([]);
