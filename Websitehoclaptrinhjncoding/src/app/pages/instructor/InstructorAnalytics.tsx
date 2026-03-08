@@ -60,11 +60,11 @@ export function InstructorAnalytics() {
   return (
     <div className="space-y-6">
       <Link
-        to="/instructor/courses"
+        to="/instructor/analytics"
         className="inline-flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors"
       >
         <ArrowLeft className="w-4 h-4" />
-        Quay lại
+        Quay lại thống kê
       </Link>
 
       <div>

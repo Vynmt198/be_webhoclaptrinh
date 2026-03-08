@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { motion } from 'motion/react';
-import { Search, Filter, Loader2, Plus, Eye, BarChart2, Send, Trash2, Pencil } from 'lucide-react';
+import { Search, Filter, Loader2, Plus, Eye, Send, Trash2, Pencil } from 'lucide-react';
 import { toast } from 'sonner';
 import { instructorApi, courseApi, Course } from '@/app/lib/api';
 import {
@@ -205,23 +205,21 @@ export function InstructorCourses() {
                       </td>
                       <td className="px-4 py-4 text-right">
                         <div className="flex items-center justify-end gap-2">
+                          <Link
+                            to={`/instructor/courses/${course._id}/edit`}
+                            className="p-2 text-blue-500 hover:bg-blue-500/10 rounded-lg transition-colors"
+                            title="Chỉnh sửa (nội dung, bài học, quiz)"
+                          >
+                            <Pencil className="w-4 h-4" />
+                          </Link>
                           {course.status === 'draft' && (
-                            <>
-                              <Link
-                                to={`/instructor/courses/${course._id}/edit`}
-                                className="p-2 text-blue-500 hover:bg-blue-500/10 rounded-lg transition-colors"
-                                title="Chỉnh sửa"
-                              >
-                                <Pencil className="w-4 h-4" />
-                              </Link>
-                              <button
-                                onClick={() => handleSubmitForReview(course._id)}
-                                className="p-2 text-amber-500 hover:bg-amber-500/10 rounded-lg transition-colors"
-                                title="Gửi duyệt"
-                              >
-                                <Send className="w-4 h-4" />
-                              </button>
-                            </>
+                            <button
+                              onClick={() => handleSubmitForReview(course._id)}
+                              className="p-2 text-amber-500 hover:bg-amber-500/10 rounded-lg transition-colors"
+                              title="Gửi duyệt"
+                            >
+                              <Send className="w-4 h-4" />
+                            </button>
                           )}
                           {/* Xóa: chỉ nháp, chờ duyệt, từ chối. Khóa đã tắt (disabled) chỉ admin mới xóa được. */}
                           {(course.status === 'draft' || course.status === 'pending' || course.status === 'rejected') && (
@@ -235,17 +233,11 @@ export function InstructorCourses() {
                           )}
                           <Link
                             to={`/courses/${course._id}`}
+                            state={{ from: 'instructor-courses' }}
                             className="p-2 text-muted-foreground hover:bg-muted hover:text-foreground rounded-lg transition-colors"
                             title="Xem chi tiết"
                           >
                             <Eye className="w-4 h-4" />
-                          </Link>
-                          <Link
-                            to={`/instructor/analytics/${course._id}`}
-                            className="p-2 text-muted-foreground hover:bg-muted hover:text-foreground rounded-lg transition-colors"
-                            title="Thống kê"
-                          >
-                            <BarChart2 className="w-4 h-4" />
                           </Link>
                         </div>
                       </td>
