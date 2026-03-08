@@ -233,7 +233,7 @@ export const courseApi = {
     getCurriculum: (id: string) =>
         request<{ success: boolean; data: Lesson[] }>(`/courses/${id}/curriculum`),
 
-    getReviews: (id: string, params?: { page?: number; limit?: number }) => {
+    getReviews: (id: string, params?: { page?: number; limit?: number; sort?: 'newest' | 'highest' | 'lowest' }) => {
         const q = new URLSearchParams(
             Object.entries(params || {})
                 .filter(([, v]) => v != null && String(v) !== '')
@@ -268,6 +268,8 @@ export const reviewApi = {
             method: 'PUT',
             body: payload as Record<string, unknown>,
         }),
+    delete: (reviewId: string) =>
+        request<{ success: boolean }>(`/reviews/${reviewId}`, { method: 'DELETE' }),
 };
 
 export const lessonApi = {
