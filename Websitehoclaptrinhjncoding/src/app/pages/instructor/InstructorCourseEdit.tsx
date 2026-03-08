@@ -33,6 +33,7 @@ export function InstructorCourseEdit() {
   });
   const [loadingQuiz, setLoadingQuiz] = useState(false);
   const [savingQuiz, setSavingQuiz] = useState(false);
+  const [courseStatus, setCourseStatus] = useState<string>('draft');
   const [form, setForm] = useState({
     title: '',
     description: '',
@@ -61,6 +62,7 @@ export function InstructorCourseEdit() {
       .getById(id)
       .then((res) => {
         const c = res.data;
+        setCourseStatus(c.status || 'draft');
         setForm({
           title: c.title || '',
           description: c.description || '',
@@ -265,16 +267,19 @@ export function InstructorCourseEdit() {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!id) return;
-    if (!form.title.trim()) {
-      toast.error('Vui lòng nhập tên khóa học.');
-      return;
+    const isDraft = courseStatus === 'draft';
+    if (isDraft) {
+      if (!form.title.trim()) {
+        toast.error('Vui lòng nhập tên khóa học.');
+        return;
+      }
+      if (!form.categoryId) {
+        toast.error('Vui lòng chọn danh mục khóa học.');
+        return;
+      }
     }
     if (!form.description.trim()) {
       toast.error('Vui lòng nhập mô tả khóa học.');
-      return;
-    }
-    if (!form.categoryId) {
-      toast.error('Vui lòng chọn danh mục khóa học.');
       return;
     }
     if (form.estimatedCompletionHours < 0) {
@@ -282,17 +287,25 @@ export function InstructorCourseEdit() {
       return;
     }
     setLoading(true);
+    const payload = isDraft
+      ? {
+          title: form.title.trim(),
+          description: form.description.trim(),
+          syllabus: form.syllabus || undefined,
+          categoryId: form.categoryId || null,
+          level: form.level,
+          price: form.price,
+          thumbnail: form.thumbnail || null,
+          estimatedCompletionHours: form.estimatedCompletionHours || 0,
+        }
+      : {
+          description: form.description.trim(),
+          syllabus: form.syllabus || undefined,
+          thumbnail: form.thumbnail || null,
+          estimatedCompletionHours: form.estimatedCompletionHours || 0,
+        };
     courseApi
-      .update(id, {
-        title: form.title.trim(),
-        description: form.description.trim(),
-        syllabus: form.syllabus || undefined,
-        categoryId: form.categoryId || null,
-        level: form.level,
-        price: form.price,
-        thumbnail: form.thumbnail || null,
-        estimatedCompletionHours: form.estimatedCompletionHours || 0,
-      })
+      .update(id, payload)
       .then((res) => {
         toast.success('Đã cập nhật khóa học!');
         navigate(`/courses/${res.data._id}`);
@@ -314,7 +327,9 @@ export function InstructorCourseEdit() {
       <div>
         <h1 className="text-3xl font-bold mb-2">Chỉnh sửa khóa học</h1>
         <p className="text-muted-foreground">
-          Cập nhật thông tin khóa học. Chỉ có thể chỉnh sửa khi khóa ở trạng thái Nháp.
+          {courseStatus === 'draft'
+            ? 'Cập nhật thông tin khóa học. Có thể sửa mọi trường khi khóa ở trạng thái Nháp.'
+            : 'Khóa đã gửi duyệt/đã duyệt: chỉ có thể sửa mô tả, nội dung học, ảnh bìa, thời lượng. Tên, danh mục, cấp độ, giá do admin quản lý.'}
         </p>
       </div>
 
@@ -325,15 +340,20 @@ export function InstructorCourseEdit() {
         className="space-y-6 bg-card border border-border rounded-xl p-6"
       >
         <div>
-          <label className="block text-sm font-medium mb-2">Tên khóa học *</label>
+          <label className="block text-sm font-medium mb-2">Tên khóa học {courseStatus === 'draft' ? '*' : ''}</label>
           <input
             type="text"
             value={form.title}
             onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))}
             placeholder="VD: Lập trình Python cơ bản"
-            className="w-full px-4 py-2 border border-border rounded-lg focus:ring-2 focus:ring-primary/50 outline-none"
-            required
+            className="w-full px-4 py-2 border border-border rounded-lg focus:ring-2 focus:ring-primary/50 outline-none disabled:opacity-60 disabled:cursor-not-allowed bg-muted/30"
+            required={courseStatus === 'draft'}
+            readOnly={courseStatus !== 'draft'}
+            disabled={courseStatus !== 'draft'}
           />
+          {courseStatus !== 'draft' && (
+            <p className="text-xs text-muted-foreground mt-1">Không thể thay đổi khi khóa đã gửi duyệt/đã duyệt</p>
+          )}
         </div>
 
         <div>
@@ -360,11 +380,12 @@ export function InstructorCourseEdit() {
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
-            <label className="block text-sm font-medium mb-2">Danh mục *</label>
+            <label className="block text-sm font-medium mb-2">Danh mục {courseStatus === 'draft' ? '*' : ''}</label>
             <select
               value={form.categoryId}
               onChange={(e) => setForm((f) => ({ ...f, categoryId: e.target.value }))}
-              className="w-full px-4 py-2 bg-card border border-border rounded-lg focus:ring-2 focus:ring-primary/50 outline-none"
+              className="w-full px-4 py-2 border border-border rounded-lg focus:ring-2 focus:ring-primary/50 outline-none disabled:opacity-60 disabled:cursor-not-allowed bg-muted/30"
+              disabled={courseStatus !== 'draft'}
             >
               <option value="">-- Chọn danh mục --</option>
               {categories.map((c) => (
@@ -379,7 +400,8 @@ export function InstructorCourseEdit() {
             <select
               value={form.level}
               onChange={(e) => setForm((f) => ({ ...f, level: e.target.value }))}
-              className="w-full px-4 py-2 bg-card border border-border rounded-lg focus:ring-2 focus:ring-primary/50 outline-none"
+              className="w-full px-4 py-2 border border-border rounded-lg focus:ring-2 focus:ring-primary/50 outline-none disabled:opacity-60 disabled:cursor-not-allowed bg-muted/30"
+              disabled={courseStatus !== 'draft'}
             >
               <option value="beginner">Cơ bản</option>
               <option value="intermediate">Trung cấp</option>
@@ -398,8 +420,12 @@ export function InstructorCourseEdit() {
               value={form.price || ''}
               onChange={(e) => setForm((f) => ({ ...f, price: parseInt(e.target.value, 10) || 0 }))}
               placeholder="0 = Miễn phí"
-              className="w-full px-4 py-2 border border-border rounded-lg focus:ring-2 focus:ring-primary/50 outline-none"
+              className="w-full px-4 py-2 border border-border rounded-lg focus:ring-2 focus:ring-primary/50 outline-none disabled:opacity-60 disabled:cursor-not-allowed bg-muted/30"
+              disabled={courseStatus !== 'draft'}
             />
+            {courseStatus !== 'draft' && (
+              <p className="text-xs text-muted-foreground mt-1">Liên hệ admin để thay đổi giá</p>
+            )}
           </div>
           <div>
             <label className="block text-sm font-medium mb-2">Thời gian học ước tính (giờ) *</label>
