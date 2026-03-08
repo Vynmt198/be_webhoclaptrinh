@@ -24,11 +24,15 @@ export function Layout() {
 
   const isActive = (path) => location.pathname === path;
 
+  const isLearner = isAuthenticated && !['admin', 'instructor'].includes(user?.role || '');
+
   const navLinks = [
     { path: "/", label: "Trang chủ" },
     { path: "/courses", label: "Khóa học" },
-    { path: "/my-courses", label: "Khóa của tôi" },
-    { path: "/account", label: "Chứng chỉ", icon: Award },
+    ...(isLearner ? [
+      { path: "/my-courses", label: "Khóa của tôi" },
+      { path: "/account", label: "Chứng chỉ", icon: Award },
+    ] : [])
   ];
 
   return (
@@ -162,13 +166,6 @@ export function Layout() {
                     <LogIn className="w-4 h-4" />
                     <span>Đăng nhập</span>
                   </Link>
-                  <Link
-                    to="/account"
-                    className="px-4 py-2 text-sm bg-gradient-to-r from-blue-600 via-purple-600 to-blue-700 text-white rounded-lg hover:shadow-lg hover:shadow-primary/25 transition-all flex items-center space-x-2"
-                  >
-                    <User className="w-4 h-4" />
-                    <span>Tài khoản</span>
-                  </Link>
                 </>
               )}
             </div>
@@ -258,51 +255,71 @@ export function Layout() {
 
                   <div className="border-t border-border my-2" />
 
-                  {user?.role === 'admin' && (
+                  {isAuthenticated ? (
+                    <>
+                      {user?.role === 'admin' && (
+                        <motion.div
+                          initial={{ opacity: 0, x: -20 }}
+                          animate={{ opacity: 1, x: 0 }}
+                          transition={{ delay: (navLinks.length + 2) * 0.06 }}
+                        >
+                          <Link
+                            to="/admin/users"
+                            onClick={() => setMobileMenuOpen(false)}
+                            className="block px-4 py-3 rounded-lg text-muted-foreground hover:bg-muted transition-colors flex items-center space-x-2"
+                          >
+                            <Shield className="w-4 h-4" />
+                            <span>Admin</span>
+                          </Link>
+                        </motion.div>
+                      )}
+                      <motion.div
+                        initial={{ opacity: 0, x: -20 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        transition={{ delay: (navLinks.length + 3) * 0.06 }}
+                      >
+                        <Link
+                          to="/account"
+                          onClick={() => setMobileMenuOpen(false)}
+                          className="block px-4 py-3 rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 transition-colors flex items-center space-x-2"
+                        >
+                          <User className="w-4 h-4" />
+                          <span>Tài khoản</span>
+                        </Link>
+                      </motion.div>
+                      <motion.div
+                        initial={{ opacity: 0, x: -20 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        transition={{ delay: (navLinks.length + 4) * 0.06 }}
+                      >
+                        <button
+                          onClick={() => {
+                            setMobileMenuOpen(false);
+                            handleLogout();
+                          }}
+                          className="w-full text-left block px-4 py-3 rounded-lg text-red-500 hover:bg-red-500/10 transition-colors flex items-center space-x-2"
+                        >
+                          <LogOut className="w-4 h-4" />
+                          <span>Đăng xuất</span>
+                        </button>
+                      </motion.div>
+                    </>
+                  ) : (
                     <motion.div
                       initial={{ opacity: 0, x: -20 }}
                       animate={{ opacity: 1, x: 0 }}
-                      transition={{ delay: (navLinks.length + 2) * 0.06 }}
+                      transition={{ delay: (navLinks.length + 1) * 0.06 }}
                     >
                       <Link
-                        to="/admin/users"
+                        to="/login"
                         onClick={() => setMobileMenuOpen(false)}
                         className="block px-4 py-3 rounded-lg text-muted-foreground hover:bg-muted transition-colors flex items-center space-x-2"
                       >
-                        <Shield className="w-4 h-4" />
-                        <span>Admin</span>
+                        <LogIn className="w-4 h-4" />
+                        <span>Đăng nhập</span>
                       </Link>
                     </motion.div>
                   )}
-                  <motion.div
-                    initial={{ opacity: 0, x: -20 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    transition={{ delay: (navLinks.length + 1) * 0.06 }}
-                  >
-                    <Link
-                      to="/login"
-                      onClick={() => setMobileMenuOpen(false)}
-                      className="block px-4 py-3 rounded-lg text-muted-foreground hover:bg-muted transition-colors flex items-center space-x-2"
-                    >
-                      <LogIn className="w-4 h-4" />
-                      <span>Đăng nhập</span>
-                    </Link>
-                  </motion.div>
-
-                  <motion.div
-                    initial={{ opacity: 0, x: -20 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    transition={{ delay: (navLinks.length + 2) * 0.06 }}
-                  >
-                    <Link
-                      to="/account"
-                      onClick={() => setMobileMenuOpen(false)}
-                      className="block px-4 py-3 rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 transition-colors flex items-center space-x-2"
-                    >
-                      <User className="w-4 h-4" />
-                      <span>Tài khoản</span>
-                    </Link>
-                  </motion.div>
                 </div>
               </motion.div>
             )}

@@ -364,7 +364,7 @@ export function InstructorCourseEdit() {
             <select
               value={form.categoryId}
               onChange={(e) => setForm((f) => ({ ...f, categoryId: e.target.value }))}
-              className="w-full px-4 py-2 border border-border rounded-lg focus:ring-2 focus:ring-primary/50 outline-none"
+              className="w-full px-4 py-2 bg-card border border-border rounded-lg focus:ring-2 focus:ring-primary/50 outline-none"
             >
               <option value="">-- Chọn danh mục --</option>
               {categories.map((c) => (
@@ -379,7 +379,7 @@ export function InstructorCourseEdit() {
             <select
               value={form.level}
               onChange={(e) => setForm((f) => ({ ...f, level: e.target.value }))}
-              className="w-full px-4 py-2 border border-border rounded-lg focus:ring-2 focus:ring-primary/50 outline-none"
+              className="w-full px-4 py-2 bg-card border border-border rounded-lg focus:ring-2 focus:ring-primary/50 outline-none"
             >
               <option value="beginner">Cơ bản</option>
               <option value="intermediate">Trung cấp</option>

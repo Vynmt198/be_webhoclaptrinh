@@ -27,9 +27,11 @@ export function Account() {
 
   const tabs = [
     { id: 'profile', label: 'Hồ sơ', icon: User },
-    { id: 'courses', label: 'Khóa học', icon: BookOpen },
-    { id: 'certificates', label: 'Chứng chỉ', icon: Award },
-    { id: 'settings', label: 'Cài đặt', icon: Settings },
+    ...(user?.role === 'admin' || user?.role === 'instructor' ? [] : [
+      { id: 'courses', label: 'Khóa học', icon: BookOpen },
+      { id: 'certificates', label: 'Chứng chỉ', icon: Award },
+      { id: 'settings', label: 'Cài đặt', icon: Settings },
+    ])
   ];
 
   // Derive avatar initials
@@ -128,7 +130,10 @@ export function Account() {
               </nav>
 
               <button
-                onClick={logout}
+                onClick={() => {
+                  logout();
+                  window.location.href = '/login';
+                }}
                 className="mt-4 w-full px-4 py-3 rounded-lg text-red-500 hover:bg-red-500/10 transition-colors text-sm font-medium"
               >
                 Đăng xuất
