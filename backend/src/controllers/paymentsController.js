@@ -96,15 +96,79 @@ exports.vnpayReturn = async (req, res, next) => {
 
         await payment.save();
 
-        await payment.save();
-
+        // Redirect về frontend với tất cả query params từ VNPay để frontend có thể gọi API
         const redirectUrl = new URL(`${clientUrl}/payment-result`);
-        redirectUrl.searchParams.append('orderId', orderId);
-        redirectUrl.searchParams.append('status', responseCode === '00' ? 'success' : 'failed');
-        redirectUrl.searchParams.append('amount', payment.amount);
-        redirectUrl.searchParams.append('message', vnpayService.getPaymentStatus(responseCode));
+        // Thêm tất cả query params từ VNPay vào redirect URL
+        Object.keys(vnp_Params).forEach(key => {
+            redirectUrl.searchParams.append(key, vnp_Params[key]);
+        });
 
         res.redirect(redirectUrl.toString());
+    } catch (error) {
+        next(error);
+    }
+};
+
+// Endpoint mới để trả về JSON cho frontend
+exports.vnpayReturnApi = async (req, res, next) => {
+    try {
+        const vnp_Params = req.query;
+
+        const isValid = vnpayService.verifyReturnUrl(vnp_Params);
+
+        if (!isValid) {
+            return res.status(200).json({
+                success: false,
+                responseCode: '97',
+                message: 'Invalid signature',
+            });
+        }
+
+        const orderId = vnp_Params.vnp_TxnRef;
+        const responseCode = vnp_Params.vnp_ResponseCode;
+
+        const payment = await Payment.findOne({ orderId });
+
+        if (!payment) {
+            return res.status(200).json({
+                success: false,
+                responseCode: '01',
+                message: 'Payment not found',
+            });
+        }
+
+        payment.transactionNo = vnp_Params.vnp_TransactionNo;
+        payment.bankCode = vnp_Params.vnp_BankCode;
+        payment.cardType = vnp_Params.vnp_CardType;
+        payment.vnpayData = vnp_Params;
+
+        if (responseCode === '00') {
+            payment.paymentStatus = 'success';
+
+            if (payment.courseId) {
+                const enrollment = await Enrollment.findOneAndUpdate(
+                    { userId: payment.userId, courseId: payment.courseId },
+                    { status: 'active' },
+                    { upsert: true, new: true }
+                );
+                payment.enrollmentId = enrollment._id;
+            }
+        } else {
+            payment.paymentStatus = 'failed';
+        }
+
+        await payment.save();
+
+        return res.status(200).json({
+            success: responseCode === '00',
+            responseCode: responseCode,
+            message: vnpayService.getPaymentStatus(responseCode),
+            data: {
+                orderId: orderId,
+                amount: payment.amount,
+                transactionNo: payment.transactionNo,
+            },
+        });
     } catch (error) {
         next(error);
     }

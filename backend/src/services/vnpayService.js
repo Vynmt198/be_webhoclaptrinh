@@ -60,11 +60,16 @@ class VNPayService {
     }
 
     verifyReturnUrl(vnp_Params) {
-        const secureHash = vnp_Params.vnp_SecureHash;
-        delete vnp_Params.vnp_SecureHash;
-        delete vnp_Params.vnp_SecureHashType;
+        // IMPORTANT: Không mutate object đầu vào (thường là req.query).
+        // Nếu delete trực tiếp sẽ làm mất vnp_SecureHash khi redirect sang frontend,
+        // dẫn tới lần verify tiếp theo (qua API) bị fail dù vnp_ResponseCode là '00'.
+        const params = { ...vnp_Params };
 
-        const sortedParams = this.sortObject(vnp_Params);
+        const secureHash = params.vnp_SecureHash;
+        delete params.vnp_SecureHash;
+        delete params.vnp_SecureHashType;
+
+        const sortedParams = this.sortObject(params);
         // Sử dụng qs.stringify để đồng nhất cách encode với lúc tạo URL
         const signData = qs.stringify(sortedParams, { encode: true }).replace(/%20/g, "+");
 
