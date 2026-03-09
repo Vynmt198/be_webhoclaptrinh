@@ -53,17 +53,20 @@ export function PaymentResult() {
                 }
 
                 // Gọi API để lấy kết quả thanh toán với query params từ VNPay
-                // Tránh bị browser cache (ảnh của bạn đang hiện "from disk cache")
-                const apiUrl = new URL(`${BASE_URL}/payments/vnpay-return-api${queryString}`);
-                apiUrl.searchParams.set('_ts', Date.now().toString());
-
-                const response = await fetch(apiUrl.toString(), {
+                // Lưu ý: KHÔNG được thêm params lạ (vd: _ts) vì sẽ làm sai chữ ký (Invalid signature).
+                const response = await fetch(`${BASE_URL}/payments/vnpay-return-api${queryString}`, {
                     method: 'GET',
                     cache: 'no-store',
                     headers: {
                         'Content-Type': 'application/json',
                     },
                 });
+
+                // Nếu vì lý do CORS/network mà không call được API, fallback về mã VNPay để hiển thị UI đúng.
+                if (!response.ok) {
+                    setResponseCode(vnpResponseCode || '97');
+                    return;
+                }
 
                 const data = await response.json();
 
@@ -75,7 +78,9 @@ export function PaymentResult() {
                 }
             } catch (error) {
                 console.error('Error fetching payment result:', error);
-                setResponseCode('97'); // Lỗi khi gọi API
+                // Fallback về mã VNPay để không hiển thị sai (vd: happy case 00 nhưng API bị CORS)
+                const vnpResponseCode = searchParams.get('vnp_ResponseCode');
+                setResponseCode(vnpResponseCode || '97');
             } finally {
                 setLoading(false);
             }

@@ -76,7 +76,8 @@ class VNPayService {
         const hmac = crypto.createHmac('sha512', vnpayConfig.vnp_HashSecret);
         const signed = hmac.update(Buffer.from(signData, 'utf-8')).digest('hex');
 
-        return secureHash === signed;
+        if (!secureHash) return false;
+        return String(secureHash).toLowerCase() === String(signed).toLowerCase();
     }
 
     getPaymentStatus(responseCode) {
