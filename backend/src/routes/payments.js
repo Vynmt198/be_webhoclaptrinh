@@ -6,6 +6,7 @@ const { validateCreatePayment } = require('../utils/paymentValidator');
 
 router.post('/create', auth, validateCreatePayment, paymentsController.createPayment);
 router.get('/vnpay-return', paymentsController.vnpayReturn);
+router.get('/vnpay-return-api', paymentsController.vnpayReturnApi);
 router.get('/vnpay-ipn', paymentsController.vnpayIPN);
 router.get('/history', auth, paymentsController.getPaymentHistory);
 router.get('/stats/summary', auth, paymentsController.getPaymentStats);
