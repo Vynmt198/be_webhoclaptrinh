@@ -59,12 +59,10 @@ exports.vnpayReturn = async (req, res, next) => {
         const vnp_Params = req.query;
 
         const isValid = vnpayService.verifyReturnUrl(vnp_Params);
+        const clientUrl = process.env.CLIENT_URL || 'http://localhost:5173';
 
         if (!isValid) {
-            return res.status(400).json({
-                success: false,
-                message: 'Invalid signature',
-            });
+            return res.redirect(`${clientUrl}/payment-result?status=failed&message=Invalid+signature`);
         }
 
         const orderId = vnp_Params.vnp_TxnRef;
@@ -73,10 +71,7 @@ exports.vnpayReturn = async (req, res, next) => {
         const payment = await Payment.findOne({ orderId });
 
         if (!payment) {
-            return res.status(404).json({
-                success: false,
-                message: 'Payment not found',
-            });
+            return res.redirect(`${clientUrl}/payment-result?status=failed&message=Payment+not+found`);
         }
 
         payment.transactionNo = vnp_Params.vnp_TransactionNo;
@@ -101,16 +96,15 @@ exports.vnpayReturn = async (req, res, next) => {
 
         await payment.save();
 
-        res.status(200).json({
-            success: responseCode === '00',
-            message: vnpayService.getPaymentStatus(responseCode),
-            data: {
-                orderId,
-                amount: payment.amount,
-                status: payment.paymentStatus,
-                transactionNo: payment.transactionNo,
-            },
-        });
+        await payment.save();
+
+        const redirectUrl = new URL(`${clientUrl}/payment-result`);
+        redirectUrl.searchParams.append('orderId', orderId);
+        redirectUrl.searchParams.append('status', responseCode === '00' ? 'success' : 'failed');
+        redirectUrl.searchParams.append('amount', payment.amount);
+        redirectUrl.searchParams.append('message', vnpayService.getPaymentStatus(responseCode));
+
+        res.redirect(redirectUrl.toString());
     } catch (error) {
         next(error);
     }

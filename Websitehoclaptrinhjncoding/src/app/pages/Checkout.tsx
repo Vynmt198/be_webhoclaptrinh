@@ -1,46 +1,44 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'motion/react';
-import { CreditCard, Building2, Wallet, CheckCircle, ArrowLeft } from 'lucide-react';
+import { Wallet, CheckCircle, ArrowLeft } from 'lucide-react';
 import { useCart } from '@/app/context/CartContext';
-
-type PaymentMethod = 'credit-card' | 'bank-transfer' | 'e-wallet';
+import { paymentApi } from '@/app/lib/api';
+import { toast } from 'sonner';
 
 export function Checkout() {
   const navigate = useNavigate();
-  const { items, getTotalPrice, clearCart } = useCart();
-  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('credit-card');
+  const { items, getTotalPrice } = useCart();
   const [isProcessing, setIsProcessing] = useState(false);
 
   const total = getTotalPrice();
   const discount = Math.round(total * 0.1);
   const finalTotal = total - discount;
 
-  const [formData, setFormData] = useState({
-    fullName: '',
-    email: '',
-    phone: '',
-    cardNumber: '',
-    cardExpiry: '',
-    cardCVV: '',
-    bankName: '',
-    accountNumber: '',
-    walletPhone: ''
-  });
-
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setFormData(prev => ({ ...prev, [e.target.name]: e.target.value }));
-  };
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsProcessing(true);
+    console.log("Submit clicked. Processing VNPay redirect");
 
-    // Simulate payment processing
-    await new Promise(resolve => setTimeout(resolve, 2000));
-
-    clearCart();
-    navigate('/order-success');
+    try {
+      const courseIds = items.map(item => item.id);
+      console.log("Calling paymentApi with:", { amount: finalTotal, courseIds });
+      const res = await paymentApi.create({ amount: finalTotal, courseIds });
+      console.log("paymentApi response:", res);
+      if (res.success && res.data?.paymentUrl) {
+        console.log("Redirecting to:", res.data.paymentUrl);
+        window.location.href = res.data.paymentUrl;
+        return;
+      } else {
+        console.error("Payment API returned success but no paymentUrl", res);
+        toast.error('Lỗi khi thanh toán: Không nhận được URL thanh toán');
+        setIsProcessing(false);
+      }
+    } catch (error: any) {
+      console.error("Payment error:", error);
+      toast.error(error.message || 'Lỗi khi thanh toán');
+      setIsProcessing(false);
+    }
   };
 
   if (items.length === 0) {
@@ -68,195 +66,26 @@ export function Checkout() {
           <h1 className="text-3xl font-bold mb-8">Thanh toán</h1>
 
           <form onSubmit={handleSubmit} className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-            {/* Payment Form */}
+            {/* Left side: Information Banner */}
             <div className="lg:col-span-2 space-y-6">
-              {/* Contact Information */}
-              <div className="bg-card border border-border rounded-xl p-6">
-                <h2 className="text-xl font-semibold mb-6">Thông tin liên hệ</h2>
-                <div className="space-y-4">
-                  <div>
-                    <label className="block text-sm font-medium mb-2">Họ và tên</label>
-                    <input
-                      type="text"
-                      name="fullName"
-                      value={formData.fullName}
-                      onChange={handleChange}
-                      className="w-full px-4 py-3 bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/50"
-                      required
-                    />
+              <div className="bg-card border border-border rounded-xl p-8 flex flex-col items-center justify-center text-center h-[calc(100%-1.5rem)]">
+                <Wallet className="w-20 h-20 text-blue-500 mb-6" />
+                <h2 className="text-2xl font-bold mb-4">Thanh toán qua VNPay</h2>
+                <p className="text-muted-foreground max-w-md mx-auto leading-relaxed">
+                  Bạn sẽ được chuyển hướng an toàn tới cổng thanh toán VNPay.
+                  Hỗ trợ thanh toán qua quét mã QR, thẻ ATM nội địa, và các ví điện tử.
+                </p>
+
+                <div className="mt-8 flex gap-4 items-center justify-center opacity-60">
+                  <div className="flex items-center gap-2">
+                    <CheckCircle className="w-5 h-5 text-green-500" />
+                    <span className="text-sm">Bảo mật</span>
                   </div>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-sm font-medium mb-2">Email</label>
-                      <input
-                        type="email"
-                        name="email"
-                        value={formData.email}
-                        onChange={handleChange}
-                        className="w-full px-4 py-3 bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/50"
-                        required
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium mb-2">Số điện thoại</label>
-                      <input
-                        type="tel"
-                        name="phone"
-                        value={formData.phone}
-                        onChange={handleChange}
-                        className="w-full px-4 py-3 bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/50"
-                        required
-                      />
-                    </div>
+                  <div className="flex items-center gap-2">
+                    <CheckCircle className="w-5 h-5 text-green-500" />
+                    <span className="text-sm">Nhanh chóng</span>
                   </div>
                 </div>
-              </div>
-
-              {/* Payment Method */}
-              <div className="bg-card border border-border rounded-xl p-6">
-                <h2 className="text-xl font-semibold mb-6">Phương thức thanh toán</h2>
-
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-                  <button
-                    type="button"
-                    onClick={() => setPaymentMethod('credit-card')}
-                    className={`p-4 border-2 rounded-lg transition-all ${
-                      paymentMethod === 'credit-card'
-                        ? 'border-primary bg-primary/5'
-                        : 'border-border hover:border-primary/50'
-                    }`}
-                  >
-                    <CreditCard className={`w-8 h-8 mx-auto mb-2 ${
-                      paymentMethod === 'credit-card' ? 'text-primary' : 'text-muted-foreground'
-                    }`} />
-                    <p className="text-sm font-medium">Thẻ tín dụng</p>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => setPaymentMethod('bank-transfer')}
-                    className={`p-4 border-2 rounded-lg transition-all ${
-                      paymentMethod === 'bank-transfer'
-                        ? 'border-primary bg-primary/5'
-                        : 'border-border hover:border-primary/50'
-                    }`}
-                  >
-                    <Building2 className={`w-8 h-8 mx-auto mb-2 ${
-                      paymentMethod === 'bank-transfer' ? 'text-primary' : 'text-muted-foreground'
-                    }`} />
-                    <p className="text-sm font-medium">Chuyển khoản</p>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => setPaymentMethod('e-wallet')}
-                    className={`p-4 border-2 rounded-lg transition-all ${
-                      paymentMethod === 'e-wallet'
-                        ? 'border-primary bg-primary/5'
-                        : 'border-border hover:border-primary/50'
-                    }`}
-                  >
-                    <Wallet className={`w-8 h-8 mx-auto mb-2 ${
-                      paymentMethod === 'e-wallet' ? 'text-primary' : 'text-muted-foreground'
-                    }`} />
-                    <p className="text-sm font-medium">Ví điện tử</p>
-                  </button>
-                </div>
-
-                {/* Payment Details */}
-                {paymentMethod === 'credit-card' && (
-                  <div className="space-y-4">
-                    <div>
-                      <label className="block text-sm font-medium mb-2">Số thẻ</label>
-                      <input
-                        type="text"
-                        name="cardNumber"
-                        value={formData.cardNumber}
-                        onChange={handleChange}
-                        placeholder="1234 5678 9012 3456"
-                        className="w-full px-4 py-3 bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/50"
-                        required
-                      />
-                    </div>
-                    <div className="grid grid-cols-2 gap-4">
-                      <div>
-                        <label className="block text-sm font-medium mb-2">Ngày hết hạn</label>
-                        <input
-                          type="text"
-                          name="cardExpiry"
-                          value={formData.cardExpiry}
-                          onChange={handleChange}
-                          placeholder="MM/YY"
-                          className="w-full px-4 py-3 bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/50"
-                          required
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium mb-2">CVV</label>
-                        <input
-                          type="text"
-                          name="cardCVV"
-                          value={formData.cardCVV}
-                          onChange={handleChange}
-                          placeholder="123"
-                          className="w-full px-4 py-3 bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/50"
-                          required
-                        />
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {paymentMethod === 'bank-transfer' && (
-                  <div className="space-y-4">
-                    <div>
-                      <label className="block text-sm font-medium mb-2">Ngân hàng</label>
-                      <select
-                        name="bankName"
-                        value={formData.bankName}
-                        onChange={(e: any) => handleChange(e)}
-                        className="w-full px-4 py-3 bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/50"
-                        required
-                      >
-                        <option value="">Chọn ngân hàng</option>
-                        <option value="vietcombank">Vietcombank</option>
-                        <option value="techcombank">Techcombank</option>
-                        <option value="vcb">VCB</option>
-                        <option value="acb">ACB</option>
-                      </select>
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium mb-2">Số tài khoản</label>
-                      <input
-                        type="text"
-                        name="accountNumber"
-                        value={formData.accountNumber}
-                        onChange={handleChange}
-                        placeholder="1234567890"
-                        className="w-full px-4 py-3 bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/50"
-                        required
-                      />
-                    </div>
-                  </div>
-                )}
-
-                {paymentMethod === 'e-wallet' && (
-                  <div>
-                    <label className="block text-sm font-medium mb-2">Số điện thoại ví</label>
-                    <input
-                      type="tel"
-                      name="walletPhone"
-                      value={formData.walletPhone}
-                      onChange={handleChange}
-                      placeholder="0123456789"
-                      className="w-full px-4 py-3 bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/50"
-                      required
-                    />
-                    <p className="mt-2 text-sm text-muted-foreground">
-                      Hỗ trợ: MoMo, ZaloPay, VNPay
-                    </p>
-                  </div>
-                )}
               </div>
             </div>
 

@@ -17,6 +17,7 @@ import { AuthCallback } from '@/app/pages/AuthCallback';
 import { Cart } from '@/app/pages/Cart';
 import { Checkout } from '@/app/pages/Checkout';
 import { OrderSuccess } from '@/app/pages/OrderSuccess';
+import { PaymentResult } from '@/app/pages/PaymentResult';
 import { About } from '@/app/pages/About';
 import { Contact } from '@/app/pages/Contact';
 import { FAQ } from '@/app/pages/FAQ';
@@ -85,6 +86,7 @@ export default function App() {
 
             {/* Success Route (No Layout) */}
             <Route path="order-success" element={<OrderSuccess />} />
+            <Route path="payment-result" element={<PaymentResult />} />
 
             {/* 404 Route */}
             <Route path="*" element={<NotFound />} />

@@ -385,3 +385,33 @@ export const adminCourseApi = {
         }),
 };
 
+// ─── Payment ───────────────────────────────────────────────────────────────
+
+export interface PaymentInfo {
+    _id: string;
+    orderId: string;
+    amount: number;
+    paymentStatus: string;
+    orderInfo: string;
+    courseIds: string[];
+    createdAt: string;
+}
+
+export const paymentApi = {
+    create: (payload: { amount: number; courseIds: string[] }) =>
+        request<{ success: boolean; message: string; data: { paymentUrl: string; orderId: string } }>('/payments/create', {
+            method: 'POST',
+            body: payload as Record<string, unknown>,
+        }),
+    getHistory: (params?: { page?: number; limit?: number; status?: string }) => {
+        const query = new URLSearchParams(
+            Object.entries(params || {})
+                .filter(([, v]) => v !== undefined && v !== '')
+                .map(([k, v]) => [k, String(v)])
+        ).toString();
+        return request<{ success: boolean; data: { payments: PaymentInfo[]; pagination: Pagination } }>(`/payments/history${query ? `?${query}` : ''}`);
+    },
+    verifyReturn: (queryStr: string) =>
+        request<{ success: boolean; message: string; data: any }>(`/payments/vnpay-return${queryStr}`),
+};
+
