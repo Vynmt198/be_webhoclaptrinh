@@ -1,8 +1,8 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { motion } from 'motion/react';
-import { Loader2, Plus, Pencil, Trash2, ChevronUp, ChevronDown, Video, FileText, HelpCircle } from 'lucide-react';
-import { courseApi, categoryApi, lessonApi, uploadApi, instructorQuizApi, type Category, type Lesson } from '@/app/lib/api';
+import { Loader2, Plus, Pencil, Trash2, ChevronUp, ChevronDown, Video, FileText, HelpCircle, ClipboardList, Users } from 'lucide-react';
+import { courseApi, categoryApi, lessonApi, uploadApi, instructorQuizApi, assignmentApi, type Category, type Lesson, type Assignment, type AssignmentSubmission } from '@/app/lib/api';
 import { toast } from 'sonner';
 
 export function InstructorCourseEdit() {
@@ -33,6 +33,24 @@ export function InstructorCourseEdit() {
   });
   const [loadingQuiz, setLoadingQuiz] = useState(false);
   const [savingQuiz, setSavingQuiz] = useState(false);
+  const [assignments, setAssignments] = useState<Assignment[]>([]);
+  const [loadingAssignments, setLoadingAssignments] = useState(false);
+  const [assignmentModalOpen, setAssignmentModalOpen] = useState(false);
+  const [editingAssignmentId, setEditingAssignmentId] = useState<string | null>(null);
+  const [assignmentForm, setAssignmentForm] = useState({
+    title: '',
+    description: '',
+    maxScore: 100,
+    dueDate: '',
+    lessonId: '',
+  });
+  const [savingAssignment, setSavingAssignment] = useState(false);
+  const [submissionsModalAssignmentId, setSubmissionsModalAssignmentId] = useState<string | null>(null);
+  const [submissions, setSubmissions] = useState<AssignmentSubmission[]>([]);
+  const [loadingSubmissions, setLoadingSubmissions] = useState(false);
+  const [gradingSubmissionId, setGradingSubmissionId] = useState<string | null>(null);
+  const [gradeForm, setGradeForm] = useState({ score: '', feedback: '', status: 'graded' as 'submitted' | 'graded' | 'needs_revision' });
+  const [savingGrade, setSavingGrade] = useState(false);
   const [courseStatus, setCourseStatus] = useState<string>('draft');
   const [form, setForm] = useState({
     title: '',
@@ -94,6 +112,137 @@ export function InstructorCourseEdit() {
   useEffect(() => {
     fetchLessons();
   }, [fetchLessons]);
+
+  const fetchAssignments = useCallback(() => {
+    if (!id) return;
+    setLoadingAssignments(true);
+    assignmentApi
+      .listByCourse(id)
+      .then((res: { data?: { assignments?: Assignment[] } }) => setAssignments(res.data?.assignments ?? []))
+      .catch(() => setAssignments([]))
+      .finally(() => setLoadingAssignments(false));
+  }, [id]);
+
+  useEffect(() => {
+    fetchAssignments();
+  }, [fetchAssignments]);
+
+  const openAddAssignment = () => {
+    setEditingAssignmentId(null);
+    setAssignmentForm({ title: '', description: '', maxScore: 100, dueDate: '', lessonId: '' });
+    setAssignmentModalOpen(true);
+  };
+
+  const openEditAssignment = (a: Assignment) => {
+    setEditingAssignmentId(a._id);
+    setAssignmentForm({
+      title: a.title || '',
+      description: a.description || '',
+      maxScore: a.maxScore ?? 100,
+      dueDate: a.dueDate ? a.dueDate.slice(0, 10) : '',
+      lessonId: typeof a.lessonId === 'object' && a.lessonId?._id ? a.lessonId._id : '',
+    });
+    setAssignmentModalOpen(true);
+  };
+
+  const handleSaveAssignment = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!assignmentForm.title.trim()) {
+      toast.error('Vui lòng nhập tên bài tập.');
+      return;
+    }
+    setSavingAssignment(true);
+    const payload = {
+      title: assignmentForm.title.trim(),
+      description: assignmentForm.description || undefined,
+      maxScore: assignmentForm.maxScore || 100,
+      dueDate: assignmentForm.dueDate || undefined,
+      lessonId: assignmentForm.lessonId || undefined,
+    };
+    if (editingAssignmentId) {
+      assignmentApi
+        .update(editingAssignmentId, payload)
+        .then(() => {
+          toast.success('Đã cập nhật bài tập.');
+          setAssignmentModalOpen(false);
+          fetchAssignments();
+        })
+        .catch((err: Error) => toast.error(err?.message || 'Không thể cập nhật.'))
+        .finally(() => setSavingAssignment(false));
+    } else if (id) {
+      assignmentApi
+        .create(id, payload)
+        .then(() => {
+          toast.success('Đã thêm bài tập.');
+          setAssignmentModalOpen(false);
+          fetchAssignments();
+        })
+        .catch((err: Error) => toast.error(err?.message || 'Không thể thêm bài tập.'))
+        .finally(() => setSavingAssignment(false));
+    } else {
+      setSavingAssignment(false);
+    }
+  };
+
+  const handleDeleteAssignment = (assignmentId: string) => {
+    if (!window.confirm('Bạn có chắc muốn xóa bài tập này? Các bài nộp sẽ bị xóa.')) return;
+    assignmentApi
+      .delete(assignmentId)
+      .then(() => {
+        toast.success('Đã xóa bài tập.');
+        fetchAssignments();
+        if (submissionsModalAssignmentId === assignmentId) setSubmissionsModalAssignmentId(null);
+      })
+      .catch((err: Error) => toast.error(err?.message || 'Không thể xóa.'));
+  };
+
+  const openSubmissions = (assignmentId: string) => {
+    setSubmissionsModalAssignmentId(assignmentId);
+    setSubmissions([]);
+    setLoadingSubmissions(true);
+    assignmentApi
+      .getSubmissions(assignmentId)
+      .then((res: { data?: { submissions?: AssignmentSubmission[] } }) => setSubmissions(res.data?.submissions ?? []))
+      .catch(() => setSubmissions([]))
+      .finally(() => setLoadingSubmissions(false));
+  };
+
+  const openGradeForm = (sub: AssignmentSubmission) => {
+    setGradingSubmissionId(sub._id);
+    setGradeForm({
+      score: sub.score != null ? String(sub.score) : '',
+      feedback: sub.feedback || '',
+      status: sub.status || 'graded',
+    });
+  };
+
+  const handleSaveGrade = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!gradingSubmissionId) return;
+    const scoreNum = gradeForm.score.trim() ? parseFloat(gradeForm.score) : undefined;
+    if (scoreNum !== undefined && (Number.isNaN(scoreNum) || scoreNum < 0)) {
+      toast.error('Điểm không hợp lệ.');
+      return;
+    }
+    setSavingGrade(true);
+    assignmentApi
+      .gradeSubmission(gradingSubmissionId, {
+        score: scoreNum,
+        feedback: gradeForm.feedback || undefined,
+        status: gradeForm.status,
+      })
+      .then(() => {
+        toast.success('Đã lưu điểm.');
+        setGradingSubmissionId(null);
+        if (submissionsModalAssignmentId) {
+          assignmentApi
+            .getSubmissions(submissionsModalAssignmentId)
+            .then((res: { data?: { submissions?: AssignmentSubmission[] } }) => setSubmissions(res.data?.submissions ?? []));
+        }
+      })
+      .catch((err: Error) => toast.error(err?.message || 'Không thể lưu điểm.'))
+      .finally(() => setSavingGrade(false));
+  };
 
   const openAddLesson = () => {
     setEditingLessonId(null);
@@ -603,6 +752,75 @@ export function InstructorCourseEdit() {
         )}
       </motion.div>
 
+      <motion.div
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="space-y-4 bg-card border border-border rounded-xl p-6"
+      >
+        <div className="flex items-center justify-between">
+          <h2 className="text-xl font-bold flex items-center gap-2">
+            <ClipboardList className="w-5 h-5" />
+            Bài tập (Assignments)
+          </h2>
+          <button
+            type="button"
+            onClick={openAddAssignment}
+            className="inline-flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 text-sm font-medium"
+          >
+            <Plus className="w-4 h-4" />
+            Thêm bài tập
+          </button>
+        </div>
+        <p className="text-sm text-muted-foreground">
+          Học viên cần pass hết quiz trong khóa mới được nộp bài tập. Chấm đạt bài tập thì mới đủ điều kiện nhận chứng chỉ.
+        </p>
+        {loadingAssignments ? (
+          <div className="flex justify-center py-8">
+            <Loader2 className="w-8 h-8 text-primary animate-spin" />
+          </div>
+        ) : assignments.length === 0 ? (
+          <p className="text-muted-foreground py-4">Chưa có bài tập. Nhấn &quot;Thêm bài tập&quot; để tạo.</p>
+        ) : (
+          <ul className="space-y-2">
+            {assignments.map((a) => (
+              <li
+                key={a._id}
+                className="flex items-center gap-2 p-3 rounded-lg border border-border bg-muted/20 hover:bg-muted/40"
+              >
+                <ClipboardList className="w-4 h-4 text-muted-foreground shrink-0" />
+                <span className="flex-1 font-medium truncate">{a.title}</span>
+                <span className="text-xs text-muted-foreground">Điểm tối đa: {a.maxScore}</span>
+                <button
+                  type="button"
+                  onClick={() => openSubmissions(a._id)}
+                  className="p-1.5 rounded border border-border hover:bg-primary/10 text-primary flex items-center gap-1"
+                  title="Xem bài nộp"
+                >
+                  <Users className="w-4 h-4" />
+                  <span className="text-xs">Bài nộp</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => openEditAssignment(a)}
+                  className="p-1.5 rounded border border-border hover:bg-muted"
+                  title="Sửa"
+                >
+                  <Pencil className="w-4 h-4" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleDeleteAssignment(a._id)}
+                  className="p-1.5 rounded border border-border hover:bg-destructive/10 text-destructive"
+                  title="Xóa"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </motion.div>
+
       {lessonModalOpen && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
           <motion.div
@@ -843,6 +1061,211 @@ export function InstructorCourseEdit() {
                 </>
               )}
             </form>
+          </motion.div>
+        </div>
+      )}
+
+      {assignmentModalOpen && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="bg-card border border-border rounded-xl max-w-lg w-full max-h-[90vh] overflow-y-auto"
+          >
+            <div className="p-6 border-b border-border">
+              <h3 className="text-lg font-semibold">
+                {editingAssignmentId ? 'Chỉnh sửa bài tập' : 'Thêm bài tập'}
+              </h3>
+            </div>
+            <form onSubmit={handleSaveAssignment} className="p-6 space-y-4">
+              <div>
+                <label className="block text-sm font-medium mb-1">Tên bài tập *</label>
+                <input
+                  type="text"
+                  value={assignmentForm.title}
+                  onChange={(e) => setAssignmentForm((f) => ({ ...f, title: e.target.value }))}
+                  placeholder="VD: Bài tập tuần 1"
+                  className="w-full px-3 py-2 border border-border rounded-lg focus:ring-2 focus:ring-primary/50 outline-none"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-1">Mô tả / yêu cầu</label>
+                <textarea
+                  value={assignmentForm.description}
+                  onChange={(e) => setAssignmentForm((f) => ({ ...f, description: e.target.value }))}
+                  placeholder="Mô tả bài tập, yêu cầu nộp..."
+                  rows={3}
+                  className="w-full px-3 py-2 border border-border rounded-lg focus:ring-2 focus:ring-primary/50 outline-none resize-none"
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium mb-1">Điểm tối đa</label>
+                  <input
+                    type="number"
+                    min={1}
+                    value={assignmentForm.maxScore}
+                    onChange={(e) =>
+                      setAssignmentForm((f) => ({ ...f, maxScore: parseInt(e.target.value, 10) || 100 }))
+                    }
+                    className="w-full px-3 py-2 border border-border rounded-lg focus:ring-2 focus:ring-primary/50 outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium mb-1">Hạn nộp (tùy chọn)</label>
+                  <input
+                    type="date"
+                    value={assignmentForm.dueDate}
+                    onChange={(e) => setAssignmentForm((f) => ({ ...f, dueDate: e.target.value }))}
+                    className="w-full px-3 py-2 border border-border rounded-lg focus:ring-2 focus:ring-primary/50 outline-none"
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-1">Gắn với bài học (tùy chọn)</label>
+                <select
+                  value={assignmentForm.lessonId}
+                  onChange={(e) => setAssignmentForm((f) => ({ ...f, lessonId: e.target.value }))}
+                  className="w-full px-3 py-2 border border-border rounded-lg focus:ring-2 focus:ring-primary/50 outline-none"
+                >
+                  <option value="">-- Không gắn --</option>
+                  {lessons.map((l) => (
+                    <option key={l._id} value={l._id}>
+                      {l.title}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="flex gap-2 pt-2">
+                <button
+                  type="submit"
+                  disabled={savingAssignment}
+                  className="px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 disabled:opacity-50 flex items-center gap-2"
+                >
+                  {savingAssignment && <Loader2 className="w-4 h-4 animate-spin" />}
+                  {editingAssignmentId ? 'Lưu' : 'Thêm'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setAssignmentModalOpen(false)}
+                  className="px-4 py-2 border border-border rounded-lg hover:bg-muted"
+                >
+                  Hủy
+                </button>
+              </div>
+            </form>
+          </motion.div>
+        </div>
+      )}
+
+      {submissionsModalAssignmentId && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="bg-card border border-border rounded-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto"
+          >
+            <div className="p-6 border-b border-border flex items-center justify-between">
+              <h3 className="text-lg font-semibold">Bài nộp của học viên</h3>
+              <button
+                type="button"
+                onClick={() => {
+                  setSubmissionsModalAssignmentId(null);
+                  setGradingSubmissionId(null);
+                }}
+                className="text-muted-foreground hover:text-foreground"
+              >
+                Đóng
+              </button>
+            </div>
+            <div className="p-6">
+              {loadingSubmissions ? (
+                <div className="flex justify-center py-8">
+                  <Loader2 className="w-8 h-8 text-primary animate-spin" />
+                </div>
+              ) : submissions.length === 0 ? (
+                <p className="text-muted-foreground py-4">Chưa có bài nộp nào.</p>
+              ) : (
+                <ul className="space-y-3">
+                  {submissions.map((sub) => {
+                    const user = typeof sub.userId === 'object' ? sub.userId : null;
+                    const name = user?.fullName ?? (typeof sub.userId === 'string' ? sub.userId : '-');
+                    const isGrading = gradingSubmissionId === sub._id;
+                    return (
+                      <li key={sub._id} className="p-4 rounded-lg border border-border bg-muted/20 space-y-2">
+                        <div className="flex items-center justify-between">
+                          <span className="font-medium">{name}</span>
+                          <span className="text-sm text-muted-foreground">
+                            {sub.status} {sub.score != null ? `· ${sub.score} điểm` : ''}
+                          </span>
+                        </div>
+                        {sub.content && (
+                          <p className="text-sm text-muted-foreground whitespace-pre-wrap line-clamp-2">{sub.content}</p>
+                        )}
+                        {isGrading ? (
+                          <form onSubmit={handleSaveGrade} className="mt-2 space-y-2 flex flex-col gap-2">
+                            <input
+                              type="number"
+                              min={0}
+                              step={0.5}
+                              placeholder="Điểm"
+                              value={gradeForm.score}
+                              onChange={(e) => setGradeForm((f) => ({ ...f, score: e.target.value }))}
+                              className="w-24 px-2 py-1 border border-border rounded text-sm"
+                            />
+                            <textarea
+                              placeholder="Nhận xét"
+                              value={gradeForm.feedback}
+                              onChange={(e) => setGradeForm((f) => ({ ...f, feedback: e.target.value }))}
+                              rows={2}
+                              className="w-full px-2 py-1 border border-border rounded text-sm resize-none"
+                            />
+                            <select
+                              value={gradeForm.status}
+                              onChange={(e) =>
+                                setGradeForm((f) => ({
+                                  ...f,
+                                  status: e.target.value as 'submitted' | 'graded' | 'needs_revision',
+                                }))
+                              }
+                              className="w-full max-w-xs px-2 py-1 border border-border rounded text-sm"
+                            >
+                              <option value="submitted">Đã nộp</option>
+                              <option value="graded">Đã chấm</option>
+                              <option value="needs_revision">Cần sửa lại</option>
+                            </select>
+                            <div className="flex gap-2">
+                              <button
+                                type="submit"
+                                disabled={savingGrade}
+                                className="px-3 py-1.5 bg-primary text-primary-foreground rounded text-sm disabled:opacity-50"
+                              >
+                                {savingGrade ? 'Đang lưu...' : 'Lưu điểm'}
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setGradingSubmissionId(null)}
+                                className="px-3 py-1.5 border border-border rounded text-sm"
+                              >
+                                Hủy
+                              </button>
+                            </div>
+                          </form>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => openGradeForm(sub)}
+                            className="text-sm text-primary hover:underline"
+                          >
+                            Chấm điểm
+                          </button>
+                        )}
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </div>
           </motion.div>
         </div>
       )}
