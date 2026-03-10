@@ -143,6 +143,90 @@ export const adminApi = {
 
     toggleStatus: (id: string) =>
         request(`/admin/users/${id}/status`, { method: 'PUT' }),
+
+    getStats: () =>
+        request<{
+            success: boolean;
+            data: {
+                totalRevenue: number;
+                newStudentsThisWeek: number;
+                totalCourses: number;
+                revenueLast7Days: { name: string; total: number }[];
+            };
+        }>('/admin/stats'),
+
+    // Content moderation
+    getContentLessons: (params?: { search?: string; page?: number; limit?: number }) => {
+        const query = new URLSearchParams(
+            Object.entries(params || {})
+                .filter(([, v]) => v !== undefined && v !== '')
+                .map(([k, v]) => [k, String(v)])
+        ).toString();
+        return request<{
+            success: boolean;
+            data: {
+                lessons: {
+                    _id: string;
+                    title: string;
+                    courseTitle: string;
+                    instructorName: string;
+                    views: number;
+                    isHidden: boolean;
+                }[];
+                pagination: Pagination;
+            };
+        }>(`/admin/content/lessons${query ? `?${query}` : ''}`);
+    },
+
+    toggleLessonVisibility: (lessonId: string) =>
+        request<{ success: boolean; data: { lessonId: string; isHidden: boolean } }>(
+            `/admin/content/lessons/${lessonId}/visibility`,
+            { method: 'PATCH' }
+        ),
+
+    getContentComments: (params?: { search?: string; page?: number; limit?: number }) => {
+        const query = new URLSearchParams(
+            Object.entries(params || {})
+                .filter(([, v]) => v !== undefined && v !== '')
+                .map(([k, v]) => [k, String(v)])
+        ).toString();
+        return request<{
+            success: boolean;
+            data: {
+                comments: {
+                    _id: string;
+                    parentId: string | null;
+                    user: string;
+                    content: string;
+                    target: string;
+                    date: string;
+                    status: string;
+                    isReply: boolean;
+                    likesCount: number;
+                    repliesCount: number;
+                }[];
+                pagination: Pagination;
+            };
+        }>(`/admin/content/comments${query ? `?${query}` : ''}`);
+    },
+
+    deleteContentComment: (id: string) =>
+        request<{ success: boolean; message: string }>(`/admin/content/comments/${id}`, { method: 'DELETE' }),
+
+    getContentReviews: (params?: { search?: string; page?: number; limit?: number }) => {
+        const query = new URLSearchParams(
+            Object.entries(params || {})
+                .filter(([, v]) => v !== undefined && v !== '')
+                .map(([k, v]) => [k, String(v)])
+        ).toString();
+        return request<{
+            success: boolean;
+            data: {
+                reviews: { _id: string; user: string; courseTitle: string; courseId: string; rating: number; reviewText: string; date: string }[];
+                pagination: Pagination;
+            };
+        }>(`/admin/content/reviews${query ? `?${query}` : ''}`);
+    },
 };
 
 // ─── Shared Types ──────────────────────────────────────────────────────────
@@ -314,6 +398,64 @@ export const reviewApi = {
         request<{ success: boolean }>(`/reviews/${reviewId}`, { method: 'DELETE' }),
 };
 
+// ─── Discussion (thảo luận khóa học) ───────────────────────────────────────
+
+export interface DiscussionPost {
+    _id: string;
+    courseId: string;
+    userId: { _id: string; fullName: string; avatar?: string } | string;
+    parentId: string | null;
+    title: string | null;
+    content: string;
+    isPinned?: boolean;
+    likesCount?: number;
+    repliesCount?: number;
+    status?: string;
+    createdAt: string;
+    updatedAt?: string;
+}
+
+export const discussionApi = {
+    getList: (courseId: string, params?: { page?: number; limit?: number }) => {
+        const q = new URLSearchParams(
+            Object.entries(params || {})
+                .filter(([, v]) => v != null && String(v) !== '')
+                .map(([k, v]) => [k, String(v)])
+        ).toString();
+        return request<{
+            success: boolean;
+            data: { discussions: DiscussionPost[]; pagination: { total: number; page: number; limit: number; pages: number } };
+        }>(`/discussions/${courseId}${q ? `?${q}` : ''}`);
+    },
+    getReplies: (courseId: string, postId: string, params?: { page?: number; limit?: number }) => {
+        const q = new URLSearchParams(
+            Object.entries(params || {})
+                .filter(([, v]) => v != null && String(v) !== '')
+                .map(([k, v]) => [k, String(v)])
+        ).toString();
+        return request<{
+            success: boolean;
+            data: { replies: DiscussionPost[]; pagination: { total: number; page: number; limit: number; pages: number } };
+        }>(`/discussions/${courseId}/${postId}/replies${q ? `?${q}` : ''}`);
+    },
+    create: (payload: { courseId: string; title?: string; content: string }) =>
+        request<{ success: boolean; message?: string; data: { discussion: DiscussionPost } }>('/discussions', {
+            method: 'POST',
+            body: payload as Record<string, unknown>,
+        }),
+    reply: (postId: string, payload: { content: string; courseId?: string }) =>
+        request<{ success: boolean; message?: string; data: { reply: DiscussionPost } }>(`/discussions/${postId}/reply`, {
+            method: 'POST',
+            body: payload as Record<string, unknown>,
+        }),
+    like: (postId: string) =>
+        request<{ success: boolean; data: { likesCount: number } }>(`/discussions/${postId}/like`, { method: 'POST' }),
+    unlike: (postId: string) =>
+        request<{ success: boolean; data: { likesCount: number } }>(`/discussions/${postId}/unlike`, { method: 'POST' }),
+    delete: (id: string) =>
+        request<{ success: boolean }>(`/discussions/${id}`, { method: 'DELETE' }),
+};
+
 export const lessonApi = {
     getById: (id: string) =>
         request<{ success: boolean; data: Lesson }>(`/lessons/by-id/${id}`),
@@ -341,7 +483,7 @@ export interface LessonProgress {
 }
 
 export interface CourseLearningResponse {
-    course: { _id: string; title: string };
+    course: { _id: string; title: string; instructorId?: string | null };
     lessons: Lesson[];
     progress: LessonProgress[];
     completionPercentage: number;
@@ -357,6 +499,11 @@ export const progressApi = {
         request<{ success: boolean; data: LessonProgress }>('/progress/mark-complete', {
             method: 'POST',
             body: { lessonId },
+        }),
+    updatePosition: (payload: { lessonId: string; lastPosition?: number; timeSpent?: number }) =>
+        request<{ success: boolean; data: LessonProgress }>('/progress/update-position', {
+            method: 'PUT',
+            body: payload as Record<string, unknown>,
         }),
 };
 
@@ -446,9 +593,39 @@ export const instructorApi = {
         );
     },
     getAnalytics: (courseId: string) =>
-        request<{ success: boolean; data: { totalEnrollments: number; totalTimeSpentSeconds: number; totalCompletedLessons: number; courseTitle: string } }>(
+        request<{
+            success: boolean;
+            data: {
+                totalEnrollments: number;
+                totalTimeSpentSeconds: number;
+                totalCompletedLessons: number;
+                totalLessons: number;
+                expectedTimeSeconds: number;
+                completionRatePercent: number;
+                timeSpentRatePercent: number;
+                courseTitle: string;
+            };
+        }>(
             `/instructor/courses/${courseId}/analytics`
         ),
+    getCourseEnrollments: (courseId: string) =>
+        request<{
+            success: boolean;
+            data: {
+                enrollments: {
+                    userId: string;
+                    fullName: string;
+                    email: string;
+                    completedLessons: number;
+                    totalLessons: number;
+                    incompleteLessons: number;
+                    timeSpentSeconds: number;
+                    timeSpentRatePercent: number;
+                }[];
+                totalLessons: number;
+                expectedSecondsPerLearner?: number;
+            };
+        }>(`/instructor/courses/${courseId}/enrollments`),
 };
 
 export const adminCourseApi = {

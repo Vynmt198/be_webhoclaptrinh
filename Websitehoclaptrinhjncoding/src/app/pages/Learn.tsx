@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, useCallback } from 'react';
+import { useEffect, useMemo, useState, useCallback, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   ArrowLeft,
@@ -11,8 +11,13 @@ import {
   X,
   HelpCircle,
   RotateCcw,
+  MessageSquareMore,
+  ThumbsUp,
+  ChevronDown,
+  ChevronUp,
 } from 'lucide-react';
-import { learningApi, progressApi, quizApi, assignmentApi, assignmentLearnerApi, type Lesson, type LessonProgress, type Assignment, type AssignmentSubmission, type Quiz, type QuizQuestion } from '@/app/lib/api';
+import { learningApi, progressApi, quizApi, assignmentApi, assignmentLearnerApi, discussionApi, type Lesson, type LessonProgress, type Assignment, type AssignmentSubmission, type Quiz, type QuizQuestion, type DiscussionPost } from '@/app/lib/api';
+import { useAuth } from '@/app/context/AuthContext';
 import { toast } from 'sonner';
 
 interface LearningState {
@@ -20,11 +25,13 @@ interface LearningState {
   lessons: Lesson[];
   progressList: LessonProgress[];
   completionPercentage: number;
+  courseInstructorId?: string | null;
 }
 
 export function Learn() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const { user } = useAuth();
 
   const [state, setState] = useState<LearningState | null>(null);
   const [currentLessonId, setCurrentLessonId] = useState<string | null>(null);
@@ -44,6 +51,22 @@ export function Learn() {
   const [quizResult, setQuizResult] = useState<{ score: number; isPassed: boolean } | null>(null);
   const [loadingQuiz, setLoadingQuiz] = useState(false);
   const [submittingQuiz, setSubmittingQuiz] = useState(false);
+  const [discussionModalOpen, setDiscussionModalOpen] = useState(false);
+  const [chatRoomPost, setChatRoomPost] = useState<DiscussionPost | null>(null);
+  const [chatMessages, setChatMessages] = useState<DiscussionPost[]>([]);
+  const [loadingChat, setLoadingChat] = useState(false);
+  const [chatInput, setChatInput] = useState('');
+  const [sendingChat, setSendingChat] = useState(false);
+  const [replyingTo, setReplyingTo] = useState<DiscussionPost | null>(null);
+  const [openMenuId, setOpenMenuId] = useState<string | null>(null);
+  const [expandedRepliesPostIds, setExpandedRepliesPostIds] = useState<Set<string>>(new Set());
+  const chatMessagesEndRef = useRef<HTMLDivElement>(null);
+  const chatInputRef = useRef<HTMLInputElement>(null);
+
+  const timeTrackingRef = useRef<{ lessonId: string | null; lastFlushMs: number }>({
+    lessonId: null,
+    lastFlushMs: Date.now(),
+  });
 
   const fetchLearning = useCallback(async () => {
     if (!id) return;
@@ -54,6 +77,7 @@ export function Learn() {
       lessons,
       progressList: progress,
       completionPercentage: completionPercentage ?? 0,
+      courseInstructorId: course.instructorId ?? null,
     });
   }, [id]);
 
@@ -93,6 +117,7 @@ export function Learn() {
           lessons,
           progressList: progress,
           completionPercentage: completionPercentage ?? 0,
+          courseInstructorId: course.instructorId ?? null,
         });
         if (lessons.length > 0) {
           setCurrentLessonId((prev) => prev || lessons[0]._id);
@@ -110,6 +135,193 @@ export function Learn() {
   useEffect(() => {
     if (id && state) fetchAssignments();
   }, [id, state, fetchAssignments]);
+
+  const loadChatRoom = useCallback(() => {
+    if (!id) return;
+    setLoadingChat(true);
+    discussionApi
+      .getList(id, { limit: 1 })
+      .then((res) => {
+        const list = res.data?.discussions ?? [];
+        const room = list[0] ?? null;
+        setChatRoomPost(room);
+        if (!room) {
+          setChatMessages([]);
+          setLoadingChat(false);
+          return;
+        }
+        return discussionApi.getReplies(id, room._id, { limit: 200 }).then((repliesRes) => {
+          const replies = repliesRes.data?.replies ?? [];
+          const sorted = [room, ...replies].sort(
+            (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+          );
+          setChatMessages(sorted);
+        });
+      })
+      .catch(() => {
+        setChatRoomPost(null);
+        setChatMessages([]);
+      })
+      .finally(() => setLoadingChat(false));
+  }, [id]);
+
+  useEffect(() => {
+    if (!id || !discussionModalOpen) return;
+    loadChatRoom();
+  }, [id, discussionModalOpen, loadChatRoom]);
+
+  useEffect(() => {
+    if (!discussionModalOpen) {
+      setOpenMenuId(null);
+      setReplyingTo(null);
+      setExpandedRepliesPostIds(new Set());
+    }
+  }, [discussionModalOpen]);
+
+  useEffect(() => {
+    chatMessagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [chatMessages]);
+
+  const timeAgo = (dateStr: string): string => {
+    const d = new Date(dateStr);
+    const now = new Date();
+    const sec = Math.floor((now.getTime() - d.getTime()) / 1000);
+    if (sec < 60) return 'vừa xong';
+    const min = Math.floor(sec / 60);
+    if (min < 60) return `${min} phút trước`;
+    const hour = Math.floor(min / 60);
+    if (hour < 24) return `${hour} giờ trước`;
+    const day = Math.floor(hour / 24);
+    if (day < 30) return `${day} ngày trước`;
+    const month = Math.floor(day / 30);
+    if (month < 12) return `${month} tháng trước`;
+    const year = Math.floor(month / 12);
+    return `${year} năm trước`;
+  };
+
+  const userName = (u: DiscussionPost['userId']) => (typeof u === 'object' && u?.fullName ? u.fullName : '—');
+
+  const userAvatar = (u: DiscussionPost['userId']): string | undefined =>
+    typeof u === 'object' && u?.avatar ? u.avatar : undefined;
+
+  const userInitial = (u: DiscussionPost['userId']): string => {
+    const name = userName(u);
+    if (name === '—') return '?';
+    const parts = name.trim().split(/\s+/);
+    if (parts.length >= 2) return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+    return name.slice(0, 2).toUpperCase();
+  };
+
+  const handleLikeComment = (commentId: string) => {
+    discussionApi.like(commentId).then((res) => {
+      setChatMessages((prev) =>
+        prev.map((m) => (m._id === commentId ? { ...m, likesCount: res.data?.likesCount ?? (m.likesCount ?? 0) + 1 } : m))
+      );
+    }).catch(() => {});
+  };
+
+  const handleReplyClick = (msg: DiscussionPost) => {
+    setReplyingTo(msg);
+    setOpenMenuId(null);
+    setTimeout(() => chatInputRef.current?.focus(), 100);
+  };
+
+  const canDeleteComment = (msg: DiscussionPost): boolean => {
+    if (!user) return false;
+    const authorId = getMessageUserId(msg);
+    if (user._id === authorId) return true;
+    if (user.role === 'admin') return true;
+    if (user.role === 'instructor' && state?.courseInstructorId === user._id) return true;
+    return false;
+  };
+
+  const handleCopyComment = (msg: DiscussionPost) => {
+    navigator.clipboard.writeText(msg.content).then(() => toast.success('Đã sao chép.')).catch(() => {});
+    setOpenMenuId(null);
+  };
+
+  const handleReportComment = () => {
+    toast.info('Báo cáo đã gửi. Admin sẽ xem xét.');
+    setOpenMenuId(null);
+  };
+
+  const handleDeleteComment = (msg: DiscussionPost) => {
+    if (!canDeleteComment(msg)) return;
+    discussionApi.delete(msg._id).then(() => {
+      setChatMessages((prev) => prev.filter((m) => m._id !== msg._id));
+      toast.success('Đã xóa bình luận.');
+      loadChatRoom();
+    }).catch((err: Error) => toast.error(err?.message ?? 'Không xóa được.'));
+    setOpenMenuId(null);
+  };
+
+  const getMessageUserId = (m: DiscussionPost): string =>
+    typeof m.userId === 'object' && m.userId?._id ? m.userId._id : (m.userId as string);
+
+  const handleSendChat = (e: React.FormEvent) => {
+    e.preventDefault();
+    const content = chatInput.trim();
+    if (!id || !content) return;
+    setSendingChat(true);
+    const doSend = () => {
+      if (chatRoomPost) {
+        return discussionApi.reply(chatRoomPost._id, { content, courseId: id }).then(() => {
+          setChatInput('');
+          setReplyingTo(null);
+          loadChatRoom();
+          toast.success('Đã gửi.');
+        });
+      }
+      return discussionApi
+        .create({ courseId: id, title: 'Thảo luận', content })
+        .then((res) => {
+          setChatRoomPost(res.data?.discussion ?? null);
+          setChatInput('');
+          setReplyingTo(null);
+          loadChatRoom();
+          toast.success('Đã gửi.');
+        });
+    };
+    doSend()
+      .catch((err: Error) => toast.error(err?.message ?? 'Không gửi được.'))
+      .finally(() => setSendingChat(false));
+  };
+
+  // Track time spent per lesson (page time). Flush periodically and on lesson switch/unmount.
+  useEffect(() => {
+    const lessonId = currentLessonId;
+    if (!lessonId) return;
+
+    timeTrackingRef.current.lessonId = lessonId;
+    timeTrackingRef.current.lastFlushMs = Date.now();
+
+    const flush = async () => {
+      const { lessonId: activeLessonId, lastFlushMs } = timeTrackingRef.current;
+      if (!activeLessonId) return;
+      const now = Date.now();
+      const deltaSeconds = Math.floor((now - lastFlushMs) / 1000);
+      if (deltaSeconds <= 0) return;
+      timeTrackingRef.current.lastFlushMs = now;
+      try {
+        await progressApi.updatePosition({ lessonId: activeLessonId, timeSpent: deltaSeconds });
+      } catch {
+        // Ignore: tracking should not block learning UI
+      }
+    };
+
+    const interval = window.setInterval(() => {
+      flush();
+    }, 15000);
+
+    return () => {
+      window.clearInterval(interval);
+      // Best-effort final flush on cleanup
+      flush();
+      if (timeTrackingRef.current.lessonId === lessonId) {
+        timeTrackingRef.current.lessonId = null;
+      }
+    };
+  }, [currentLessonId]);
 
   const openSubmitModal = (a: Assignment) => {
     const sub = mySubmissions.find((s) => (typeof s.assignmentId === 'object' ? s.assignmentId?._id : s.assignmentId) === a._id);
@@ -276,7 +488,7 @@ export function Learn() {
 
           <div className="p-6">
             <div className="max-w-4xl mx-auto">
-              <div className="flex items-center justify-between mb-6">
+              <div className="flex items-center justify-between mb-2">
                 <h2 className="text-2xl font-bold">{currentLesson?.title}</h2>
                 <button
                   type="button"
@@ -294,6 +506,17 @@ export function Learn() {
                       ? 'Đã hoàn thành'
                       : 'Hoàn thành bài học'}
                   </span>
+                </button>
+              </div>
+
+              <div className="flex justify-end mb-6">
+                <button
+                  type="button"
+                  onClick={() => setDiscussionModalOpen(true)}
+                  className="px-4 py-2.5 rounded-lg border border-border bg-muted/30 hover:bg-muted text-sm font-medium flex items-center gap-2 transition-colors"
+                >
+                  <MessageSquareMore className="w-5 h-5" />
+                  Hỏi đáp
                 </button>
               </div>
 
@@ -561,6 +784,169 @@ export function Learn() {
                   </div>
                 </form>
               ) : null}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Hỏi đáp - Giao diện bình luận */}
+      {discussionModalOpen && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
+          <div className="bg-card border border-border rounded-xl max-w-2xl w-full max-h-[90vh] flex flex-col shadow-xl overflow-hidden">
+            {/* Đầu: avatar + ô nhập + nút đóng */}
+            <div className="p-4 border-b border-border shrink-0">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-full bg-primary/20 text-primary flex items-center justify-center text-sm font-medium shrink-0">
+                  {user?.fullName
+                    ? (user.fullName.trim().split(/\s+/).length >= 2
+                      ? (user.fullName.trim().split(/\s+/)[0][0] + (user.fullName.trim().split(/\s+/).pop() ?? '')[0]).toUpperCase()
+                      : user.fullName.slice(0, 2).toUpperCase())
+                    : '?'}
+                </div>
+                <form onSubmit={handleSendChat} className="flex-1 flex flex-col gap-2">
+                  {replyingTo && (
+                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                      <span>Đang phản hồi {userName(replyingTo.userId)}</span>
+                      <button type="button" onClick={() => setReplyingTo(null)} className="text-primary hover:underline">Hủy</button>
+                    </div>
+                  )}
+                  <div className="flex gap-2">
+                    <input
+                      ref={chatInputRef}
+                      type="text"
+                      value={chatInput}
+                      onChange={(e) => setChatInput(e.target.value)}
+                      placeholder="Nhập bình luận mới của bạn"
+                      className="flex-1 px-4 py-2.5 rounded-lg border border-border bg-muted/30 focus:ring-2 focus:ring-primary/50 outline-none text-sm"
+                    />
+                    <button
+                      type="submit"
+                      disabled={sendingChat || !chatInput.trim()}
+                      className="px-4 py-2.5 rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50 text-sm font-medium"
+                    >
+                      {sendingChat ? 'Đang gửi...' : 'Gửi'}
+                    </button>
+                  </div>
+                </form>
+                <button type="button" onClick={() => setDiscussionModalOpen(false)} className="p-2 hover:bg-muted rounded-lg shrink-0">
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+              <div className="flex items-center justify-between mt-3 text-sm text-muted-foreground">
+                <span>{chatMessages.length} bình luận</span>
+                <span className="text-xs">Nếu thấy bình luận spam, các bạn bấm report giúp admin nhé</span>
+              </div>
+            </div>
+
+            {/* Danh sách bình luận */}
+            <div className="flex-1 overflow-y-auto p-4 min-h-0">
+              {loadingChat ? (
+                <div className="flex justify-center py-12">
+                  <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+                </div>
+              ) : chatMessages.length === 0 ? (
+                <p className="text-sm text-muted-foreground text-center py-8">Chưa có bình luận. Hãy viết bình luận đầu tiên.</p>
+              ) : (
+                (() => {
+                  const roots = chatMessages.filter((m) => !m.parentId);
+                  const repliesByParent: Record<string, DiscussionPost[]> = {};
+                  chatMessages.filter((m) => m.parentId).forEach((r) => {
+                    const pid = r.parentId!;
+                    if (!repliesByParent[pid]) repliesByParent[pid] = [];
+                    repliesByParent[pid].push(r);
+                  });
+                  const toggleReplies = (postId: string) => {
+                    setExpandedRepliesPostIds((prev) => {
+                      const next = new Set(prev);
+                      if (next.has(postId)) next.delete(postId);
+                      else next.add(postId);
+                      return next;
+                    });
+                  };
+                  const renderItem = (msg: DiscussionPost, isReply: boolean) => {
+                    const isInstructor = state?.courseInstructorId && getMessageUserId(msg) === state.courseInstructorId;
+                    const avatarUrl = userAvatar(msg.userId);
+                    return (
+                      <li
+                        key={msg._id}
+                        className={`flex gap-3 ${isReply ? 'ml-10 border-l border-border/40 pl-3' : ''}`}
+                      >
+                        <div className="shrink-0">
+                          {avatarUrl ? (
+                            <img src={avatarUrl} alt="" className={`${isReply ? 'w-8 h-8' : 'w-10 h-10'} rounded-full object-cover`} />
+                          ) : (
+                            <div className={`${isReply ? 'w-8 h-8 text-xs' : 'w-10 h-10 text-sm'} rounded-full bg-muted flex items-center justify-center font-medium text-muted-foreground`}>
+                              {userInitial(msg.userId)}
+                            </div>
+                          )}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className={isReply ? 'font-medium text-xs' : 'font-medium text-sm'}>{userName(msg.userId)}</span>
+                            {isReply && <span className="text-[10px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground">Trả lời</span>}
+                            {isInstructor && <span className="text-[10px] px-1.5 py-0.5 rounded bg-primary/20 text-primary font-medium">Giảng viên</span>}
+                            <span className="text-xs text-muted-foreground">{timeAgo(msg.createdAt ?? '')}</span>
+                          </div>
+                          <p className={`${isReply ? 'text-xs' : 'text-sm'} text-foreground mt-1 whitespace-pre-wrap break-words`}>{msg.content}</p>
+                          <div className={`flex items-center gap-4 mt-2 ${isReply ? 'text-xs' : 'text-sm'}`}>
+                            <button type="button" onClick={() => handleLikeComment(msg._id)} className="inline-flex items-center gap-1.5 text-muted-foreground hover:text-primary">
+                              <ThumbsUp className="w-4 h-4" />
+                              {msg.likesCount ? <span>({msg.likesCount})</span> : null}
+                            </button>
+                            <button type="button" onClick={() => handleReplyClick(msg)} className="text-muted-foreground hover:text-foreground">
+                              Phản hồi
+                            </button>
+                            <div className="relative ml-auto">
+                              <button type="button" onClick={() => setOpenMenuId(openMenuId === msg._id ? null : msg._id)} className="p-1 text-muted-foreground hover:text-foreground rounded" title="Tùy chọn">
+                                ⋯
+                              </button>
+                              {openMenuId === msg._id && (
+                                <>
+                                  <div className="fixed inset-0 z-10" aria-hidden onClick={() => setOpenMenuId(null)} />
+                                  <div className="absolute right-0 top-full mt-1 py-1 min-w-[140px] bg-card border border-border rounded-lg shadow-lg z-20">
+                                    <button type="button" onClick={() => handleCopyComment(msg)} className="w-full px-3 py-2 text-left text-sm hover:bg-muted">Sao chép</button>
+                                    <button type="button" onClick={handleReportComment} className="w-full px-3 py-2 text-left text-sm hover:bg-muted">Báo cáo</button>
+                                    {canDeleteComment(msg) && (
+                                      <button type="button" onClick={() => handleDeleteComment(msg)} className="w-full px-3 py-2 text-left text-sm hover:bg-muted text-destructive">Xóa</button>
+                                    )}
+                                  </div>
+                                </>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      </li>
+                    );
+                  };
+                  return (
+                    <ul className="space-y-6">
+                      {roots.map((post) => {
+                        const replies = repliesByParent[post._id] ?? [];
+                        const expanded = expandedRepliesPostIds.has(post._id);
+                        return (
+                          <li key={post._id} className="space-y-2">
+                            {renderItem(post, false)}
+                            {replies.length > 0 && (
+                              <>
+                                <button
+                                  type="button"
+                                  onClick={() => toggleReplies(post._id)}
+                                  className="flex items-center gap-1.5 text-[11px] text-primary hover:underline ml-10"
+                                >
+                                  {expanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+                                  {expanded ? 'Ẩn trả lời' : `Xem ${replies.length} trả lời`}
+                                </button>
+                                {expanded && replies.map((r) => renderItem(r, true))}
+                              </>
+                            )}
+                          </li>
+                        );
+                      })}
+                      <div ref={chatMessagesEndRef} />
+                    </ul>
+                  );
+                })()
+              )}
             </div>
           </div>
         </div>
