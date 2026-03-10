@@ -324,20 +324,48 @@ export function CourseDetail() {
                 </div>
               </div>
 
-              <div className="flex items-center space-x-4">
-                <img
-                  src={
-                    course.instructorId?.avatar ||
-                    `https://ui-avatars.com/api/?name=${encodeURIComponent(instructorName)}&background=3b82f6&color=fff`
-                  }
-                  alt={instructorName}
-                  className="w-12 h-12 rounded-full object-cover"
-                />
-                <div>
-                  <p className="text-sm text-muted-foreground">Giảng viên</p>
-                  <p className="font-medium">{instructorName}</p>
+              {course.instructorId?._id ? (
+                <Link
+                  to={{
+                    pathname: `/profile/instructor/${course.instructorId._id}`,
+                  }}
+                  state={{
+                    instructorName,
+                    instructorAvatar:
+                      course.instructorId?.avatar ||
+                      `https://ui-avatars.com/api/?name=${encodeURIComponent(instructorName)}&background=3b82f6&color=fff`,
+                  }}
+                  className="flex items-center space-x-4 rounded-lg p-2 -m-2 hover:bg-muted/50 transition-colors"
+                >
+                  <img
+                    src={
+                      course.instructorId?.avatar ||
+                      `https://ui-avatars.com/api/?name=${encodeURIComponent(instructorName)}&background=3b82f6&color=fff`
+                    }
+                    alt={instructorName}
+                    className="w-12 h-12 rounded-full object-cover"
+                  />
+                  <div>
+                    <p className="text-sm text-muted-foreground">Giảng viên</p>
+                    <p className="font-medium">{instructorName}</p>
+                  </div>
+                </Link>
+              ) : (
+                <div className="flex items-center space-x-4">
+                  <img
+                    src={
+                      course.instructorId?.avatar ||
+                      `https://ui-avatars.com/api/?name=${encodeURIComponent(instructorName)}&background=3b82f6&color=fff`
+                    }
+                    alt={instructorName}
+                    className="w-12 h-12 rounded-full object-cover"
+                  />
+                  <div>
+                    <p className="text-sm text-muted-foreground">Giảng viên</p>
+                    <p className="font-medium">{instructorName}</p>
+                  </div>
                 </div>
-              </div>
+              )}
             </motion.div>
 
             <motion.div

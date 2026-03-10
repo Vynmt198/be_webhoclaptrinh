@@ -86,12 +86,31 @@ export const authApi = {
 
 // ─── User ──────────────────────────────────────────────────────────────────
 
+/** Public profile (no email/sensitive) – for viewing instructor profile */
+export interface PublicUserProfile {
+    _id: string;
+    fullName: string;
+    avatar?: string;
+    bio?: string | null;
+    role: string;
+    instructorHeadline?: string | null;
+    instructorBio?: string | null;
+    instructorSkills?: string[];
+    instructorWebsite?: string | null;
+    instructorFacebook?: string | null;
+    instructorYoutube?: string | null;
+    instructorLinkedin?: string | null;
+}
+
 export const userApi = {
     getProfile: () =>
         request<{ success: boolean; data: { user: User } }>('/users/profile'),
 
     getProfileWithToken: (token: string) =>
         request<{ success: boolean; data: { user: User } }>('/users/profile', { token }),
+
+    getPublicProfile: (userId: string) =>
+        request<{ success: boolean; data: { user: PublicUserProfile } }>(`/users/${userId}/public-profile`),
 
     updateProfile: (payload: {
         fullName?: string;

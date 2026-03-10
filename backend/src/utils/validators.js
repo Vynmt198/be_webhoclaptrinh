@@ -80,6 +80,32 @@ const validateUpdateProfile = [
     body('avatar')
         .optional()
         .isURL().withMessage('Avatar must be a valid URL'),
+    body('instructorHeadline')
+        .optional()
+        .trim()
+        .isLength({ max: 150 }).withMessage('Headline cannot exceed 150 characters'),
+    body('instructorBio')
+        .optional()
+        .trim()
+        .isLength({ max: 2000 }).withMessage('Instructor bio cannot exceed 2000 characters'),
+    body('instructorSkills')
+        .optional()
+        .isArray().withMessage('Instructor skills must be an array of strings'),
+    body('instructorSkills.*')
+        .optional()
+        .isString().withMessage('Each instructor skill must be a string'),
+    body('instructorWebsite')
+        .optional()
+        .isURL().withMessage('Website must be a valid URL'),
+    body('instructorFacebook')
+        .optional()
+        .isURL().withMessage('Facebook must be a valid URL'),
+    body('instructorYoutube')
+        .optional()
+        .isURL().withMessage('Youtube must be a valid URL'),
+    body('instructorLinkedin')
+        .optional()
+        .isURL().withMessage('LinkedIn must be a valid URL'),
     validate,
 ];
 
