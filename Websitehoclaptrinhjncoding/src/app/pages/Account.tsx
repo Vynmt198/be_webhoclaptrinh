@@ -32,8 +32,21 @@ const [certLoaded, setCertLoaded] = useState(false);
   });
   const [isSavingPassword, setIsSavingPassword] = useState(false);
   const [showPw, setShowPw] = useState({ current: false, newPw: false, confirm: false });
-  const togglePw = (field: keyof typeof showPw) => setShowPw((p) => ({ ...p, [field]: !p[field] }));
+  const togglePw = (field: keyof typeof showPw) => setShowPw((p) => ({ ...p, [field]: !p[field] }));
 
+  // Derive avatar initials
+  const initials = user?.fullName
+    ? user.fullName.split(' ').map((w: string) => w[0]).join('').toUpperCase().slice(0, 2)
+    : 'JD';
+
+  const tabs = [
+    { id: 'profile', label: 'Hồ sơ', icon: User },
+    ...(user?.role === 'admin' || user?.role === 'instructor' ? [] : [
+      { id: 'courses', label: 'Khóa học', icon: BookOpen },
+      { id: 'certificates', label: 'Chứng chỉ', icon: Award },
+      { id: 'settings', label: 'Cài đặt', icon: Settings },
+    ])
+  ];
 
   // Đảm bảo tab đang active luôn là một trong các tab hợp lệ
   useMemo(() => {
@@ -44,26 +57,7 @@ const [certLoaded, setCertLoaded] = useState(false);
     }
   }, [tabs, activeTab]);
 
-  // Derive avatar initials
-  const initials = user?.fullName
-    ? user.fullName.split(' ').map((w: string) => w[0]).join('').toUpperCase().slice(0, 2)
-    : 'JD';
- 
-  const tabs = [
-    { id: 'profile', label: 'Hồ sơ', icon: User },
-    ...(user?.role === 'admin' || user?.role === 'instructor' ? [] : [
-      { id: 'courses', label: 'Khóa học', icon: BookOpen },
-      { id: 'certificates', label: 'Chứng chỉ', icon: Award },
-      { id: 'settings', label: 'Cài đặt', icon: Settings },
-    ])
-  ];
-
-  // Derive avatar initials
-  const initials = user?.fullName
-    ? user.fullName.split(' ').map((w: string) => w[0]).join('').toUpperCase().slice(0, 2)
-    : 'JD';
-
-  const handleSaveProfile = async (e: React.FormEvent) => {
+  const handleSaveProfile = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSavingProfile(true);
     try {
@@ -96,41 +90,9 @@ const [certLoaded, setCertLoaded] = useState(false);
     } finally {
       setIsSavingPassword(false);
     }
-  };
+  };
 
-
-              <nav className="space-y-2">
-                {tabs.map((tab) => (
-                  <button
-                    key={tab.id}
-                    onClick={() => {
-                      setActiveTab(tab.id);
-                      if (tab.id === 'certificates' && !certLoaded && !certLoading) {
-                        setCertLoading(true);
-                        certificateApi
-                          .myCertificates()
-                          .then((res) => {
-                            setCertificates(res.data?.certificates ?? []);
-                            setCertLoaded(true);
-                          })
-                          .catch((err: unknown) => {
-                            toast.error(err instanceof Error ? err.message : 'Không thể tải chứng chỉ.');
-                          })
-                          .finally(() => setCertLoading(false));
-                      }
-                    }}
-                    className={`w-full flex items-center space-x-3 px-4 py-3 rounded-lg transition-all ${activeTab === tab.id
-                      ? 'bg-primary text-primary-foreground'
-                      : 'text-muted-foreground hover:bg-muted'
-                      }`}
-                  >
-                    <tab.icon className="w-5 h-5" />
-                    <span>{tab.label}</span>
-                  </button>
-                ))}
-              </nav>
-
-  return (
+  return (
     <div className="min-h-screen py-12">
       <div className="container mx-auto px-4">
         <motion.div
@@ -169,12 +131,27 @@ const [certLoaded, setCertLoaded] = useState(false);
                 )}
               </div>
 
-              <nav className="space-y-2">
-                {tabs.map((tab) => (
-                  <button
-                    key={tab.id}
-                    onClick={() => setActiveTab(tab.id)}
-                    className={`w-full flex items-center space-x-3 px-4 py-3 rounded-lg transition-all ${activeTab === tab.id
+              <nav className="space-y-2">
+                {tabs.map((tab) => (
+                  <button
+                    key={tab.id}
+                    onClick={() => {
+                      setActiveTab(tab.id);
+                      if (tab.id === 'certificates' && !certLoaded && !certLoading) {
+                        setCertLoading(true);
+                        certificateApi
+                          .myCertificates()
+                          .then((res) => {
+                            setCertificates(res.data?.certificates ?? []);
+                            setCertLoaded(true);
+                          })
+                          .catch((err: unknown) => {
+                            toast.error(err instanceof Error ? err.message : 'Không thể tải chứng chỉ.');
+                          })
+                          .finally(() => setCertLoading(false));
+                      }
+                    }}
+                    className={`w-full flex items-center space-x-3 px-4 py-3 rounded-lg transition-all ${activeTab === tab.id
                       ? 'bg-primary text-primary-foreground'
                       : 'text-muted-foreground hover:bg-muted'
                       }`}
@@ -243,6 +220,71 @@ const [certLoaded, setCertLoaded] = useState(false);
             <span>Lưu thay đổi</span>
           </button>
         </form>
+
+        {/* Change password (inside profile tab) */}
+        <form onSubmit={handleChangePassword} className="space-y-4 pt-6 border-t border-border">
+          <h2 className="text-xl font-bold">Đổi mật khẩu</h2>
+          <div>
+            <label className="block text-sm font-medium mb-2">Mật khẩu hiện tại</label>
+            <div className="relative">
+              <input
+                type={showPw.current ? 'text' : 'password'}
+                value={passwordForm.currentPassword}
+                onChange={(e) => setPasswordForm((p) => ({ ...p, currentPassword: e.target.value }))}
+                placeholder="••••••••"
+                className="w-full px-4 py-3 pr-11 bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/50"
+                required
+                disabled={isSavingPassword}
+              />
+              <button type="button" onClick={() => togglePw('current')} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors">
+                {showPw.current ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+              </button>
+            </div>
+          </div>
+          <div>
+            <label className="block text-sm font-medium mb-2">Mật khẩu mới</label>
+            <div className="relative">
+              <input
+                type={showPw.newPw ? 'text' : 'password'}
+                value={passwordForm.newPassword}
+                onChange={(e) => setPasswordForm((p) => ({ ...p, newPassword: e.target.value }))}
+                placeholder="••••••••"
+                className="w-full px-4 py-3 pr-11 bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/50"
+                required
+                minLength={8}
+                disabled={isSavingPassword}
+              />
+              <button type="button" onClick={() => togglePw('newPw')} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors">
+                {showPw.newPw ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+              </button>
+            </div>
+          </div>
+          <div>
+            <label className="block text-sm font-medium mb-2">Xác nhận mật khẩu mới</label>
+            <div className="relative">
+              <input
+                type={showPw.confirm ? 'text' : 'password'}
+                value={passwordForm.confirmPassword}
+                onChange={(e) => setPasswordForm((p) => ({ ...p, confirmPassword: e.target.value }))}
+                placeholder="••••••••"
+                className="w-full px-4 py-3 pr-11 bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/50"
+                required
+                disabled={isSavingPassword}
+              />
+              <button type="button" onClick={() => togglePw('confirm')} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors">
+                {showPw.confirm ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+              </button>
+            </div>
+          </div>
+          <button
+            type="submit"
+            disabled={isSavingPassword}
+            className="flex items-center space-x-2 px-6 py-3 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+          >
+            {isSavingPassword && <Loader2 className="w-4 h-4 animate-spin" />}
+            <span>Đổi mật khẩu</span>
+          </button>
+        </form>
       </div>
     )}
 
@@ -299,79 +341,8 @@ const [certLoaded, setCertLoaded] = useState(false);
       </div>
     )}
 
-  </div>
-</motion.div>
-
-                  {/* Change password */}
-                  <form onSubmit={handleChangePassword} className="space-y-4 pt-6 border-t border-border">
-                    <h2 className="text-xl font-bold">Đổi mật khẩu</h2>
-                    <div>
-                      <label className="block text-sm font-medium mb-2">Mật khẩu hiện tại</label>
-                      <div className="relative">
-                        <input
-                          type={showPw.current ? 'text' : 'password'}
-                          value={passwordForm.currentPassword}
-                          onChange={(e) => setPasswordForm((p) => ({ ...p, currentPassword: e.target.value }))}
-                          placeholder="••••••••"
-                          className="w-full px-4 py-3 pr-11 bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/50"
-                          required
-                          disabled={isSavingPassword}
-                        />
-                        <button type="button" onClick={() => togglePw('current')} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors">
-                          {showPw.current ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
-                        </button>
-                      </div>
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium mb-2">Mật khẩu mới</label>
-                      <div className="relative">
-                        <input
-                          type={showPw.newPw ? 'text' : 'password'}
-                          value={passwordForm.newPassword}
-                          onChange={(e) => setPasswordForm((p) => ({ ...p, newPassword: e.target.value }))}
-                          placeholder="••••••••"
-                          className="w-full px-4 py-3 pr-11 bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/50"
-                          required
-                          minLength={8}
-                          disabled={isSavingPassword}
-                        />
-                        <button type="button" onClick={() => togglePw('newPw')} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors">
-                          {showPw.newPw ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
-                        </button>
-                      </div>
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium mb-2">Xác nhận mật khẩu mới</label>
-                      <div className="relative">
-                        <input
-                          type={showPw.confirm ? 'text' : 'password'}
-                          value={passwordForm.confirmPassword}
-                          onChange={(e) => setPasswordForm((p) => ({ ...p, confirmPassword: e.target.value }))}
-                          placeholder="••••••••"
-                          className="w-full px-4 py-3 pr-11 bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/50"
-                          required
-                          disabled={isSavingPassword}
-                        />
-                        <button type="button" onClick={() => togglePw('confirm')} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors">
-                          {showPw.confirm ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
-                        </button>
-                      </div>
-                    </div>
-                    <button
-                      type="submit"
-                      disabled={isSavingPassword}
-                      className="flex items-center space-x-2 px-6 py-3 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
-                    >
-                      {isSavingPassword && <Loader2 className="w-4 h-4 animate-spin" />}
-                      <span>Đổi mật khẩu</span>
-                    </button>
-                  </form>
-
-                </div>
-              )}
-
-              {/* ── Courses Tab ── */}
-              {activeTab === 'courses' && (
+    {/* ── Courses Tab ── */}
+    {activeTab === 'courses' && (
                 <div>
                   <h2 className="text-2xl font-bold mb-6">Khóa học đã đăng ký</h2>
                   <div className="grid gap-4">
@@ -388,34 +359,14 @@ const [certLoaded, setCertLoaded] = useState(false);
                         <button className="px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors">
                           Tiếp tục
                         </button>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
-              {/* ── Certificates Tab ── */}
-              {activeTab === 'certificates' && (
-                <div>
-                  <h2 className="text-2xl font-bold mb-6">Chứng chỉ</h2>
-                  <div className="grid md:grid-cols-2 gap-4">
-                    {[1, 2].map((item) => (
-                      <div
-                        key={item}
-                        className="p-6 border-2 border-primary/20 rounded-xl bg-gradient-to-br from-primary/5 to-accent/5"
-                      >
-                        <Award className="w-12 h-12 text-primary mb-4" />
-                        <h3 className="font-semibold mb-2">React & TypeScript</h3>
-                        <p className="text-sm text-muted-foreground mb-4">Hoàn thành: 15/01/2026</p>
-                        <button className="text-primary hover:underline text-sm">Tải xuống PDF</button>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* ── Settings Tab ── */}
-              {activeTab === 'settings' && (
+    {/* ── Settings Tab ── */}
+    {activeTab === 'settings' && (
                 <div className="space-y-6">
                   <h2 className="text-2xl font-bold">Cài đặt</h2>
                   <div className="space-y-4">
@@ -431,14 +382,14 @@ const [certLoaded, setCertLoaded] = useState(false);
                         <input type="checkbox" className="sr-only peer" defaultChecked />
                         <div className="w-11 h-6 bg-muted peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-primary/50 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary"></div>
                       </label>
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
-          </motion.div>
-        </div>
-      </div>
-    </div>
-  );
+                </div>
+              </div>
+            </div>
+    )}
+  </div>
+</motion.div>
+        </div>
+      </div>
+    </div>
+  );
 }

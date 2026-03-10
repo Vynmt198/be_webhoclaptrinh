@@ -11,7 +11,6 @@ import {
   X,
   HelpCircle,
   RotateCcw,
-import {
   Award,
   MessageSquareMore,
   ThumbsUp,
@@ -466,7 +465,6 @@ useEffect(() => {
     }
   };
 }, [currentLessonId]);
-  }, [currentLessonId]);
 
   const openSubmitModal = (a: Assignment) => {
     const sub = mySubmissions.find((s) => (typeof s.assignmentId === 'object' ? s.assignmentId?._id : s.assignmentId) === a._id);
@@ -848,16 +846,12 @@ useEffect(() => {
   </button>
 </div>
 
-{/* Quiz hero (khi lesson là quiz) */}
-{currentLesson?.type === 'quiz' && (
-  // quiz main UI ở đây
-)}
+{/* Quiz hero (khi lesson là quiz) – UI quiz chính nằm ở hero phía trên */}
+{currentLesson?.type === 'quiz' && null}
 
 {/* Khi bài học là quiz-only, phần hero phía trên đã là màn quiz chính.
     Ở đây chỉ hiển thị block quiz cho các bài học khác (ví dụ video) nhưng có quiz kèm theo. */}
-{currentLesson?.type !== 'quiz' && currentLesson?.quizId && (
-  // quiz block attach cho lesson video / reading
-)}
+              {currentLesson?.type !== 'quiz' && currentLesson?.quizId && (
                 <div className="bg-card border border-border rounded-xl p-6 mb-6">
                   <h3 className="font-semibold mb-2 flex items-center gap-2">
                     <HelpCircle className="w-5 h-5" />
