@@ -5,6 +5,11 @@ export interface CartItem {
   title: string;
   price: number;
   image?: string;
+  instructor?: string;
+  duration?: string | number;
+  lessons?: number;
+  level?: string;
+  originalPrice?: number;
 }
 
 interface CartContextValue {

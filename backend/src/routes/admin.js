@@ -11,11 +11,30 @@ const {
     updateCourseStatus,
     listPendingCourses,
 } = require('../controllers/adminCourseController');
+const { getSystemStats } = require('../controllers/adminStatsController');
+const {
+    listLessons,
+    toggleLessonVisibility,
+    listComments,
+    deleteComment,
+    listReviews,
+} = require('../controllers/adminContentController');
 const auth = require('../middleware/auth');
 const { isAdmin } = require('../middleware/roleCheck');
 
 // All admin routes require auth + isAdmin
 router.use(auth, isAdmin);
+
+// @route   GET /api/admin/stats
+// @desc    System stats for dashboard (revenue, new students, courses, revenue chart)
+router.get('/stats', getSystemStats);
+
+// Content moderation
+router.get('/content/lessons', listLessons);
+router.patch('/content/lessons/:id/visibility', toggleLessonVisibility);
+router.get('/content/comments', listComments);
+router.delete('/content/comments/:id', deleteComment);
+router.get('/content/reviews', listReviews);
 
 // @route   GET /api/admin/users
 // @desc    List all users with pagination & filters

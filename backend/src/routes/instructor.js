@@ -9,6 +9,8 @@ const roleCheck = require('../middleware/roleCheck');
 router.use(auth, roleCheck.requireRole('instructor', 'admin'));
 
 router.get('/courses', instructorController.listMyCourses);
+// More specific paths first so :id does not consume "analytics" or "enrollments"
+router.get('/courses/:id/enrollments', instructorController.getCourseEnrollmentsWithProgress);
 router.get('/courses/:id/analytics', instructorController.getCourseAnalytics);
 
 router.get('/lessons/:lessonId/quiz', roleCheck.isLessonOwnerParam('lessonId'), instructorQuizController.getQuizByLesson);

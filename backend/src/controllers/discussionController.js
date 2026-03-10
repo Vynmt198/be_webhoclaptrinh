@@ -11,6 +11,18 @@ const checkEnrolled = async (userId, courseId) => {
 };
 
 /**
+ * Helper: can user participate in discussions? (enrolled, or instructor of course, or admin)
+ */
+const checkCanParticipate = async (userId, courseId, userRole) => {
+    if (userRole === 'admin') return true;
+    const enrolled = await checkEnrolled(userId, courseId);
+    if (enrolled) return true;
+    const course = await Course.findById(courseId);
+    if (course && course.instructorId && course.instructorId.toString() === userId.toString()) return true;
+    return false;
+};
+
+/**
  * GET /api/discussions/:courseId
  * Get top-level discussions (posts) for a course, with reply counts.
  * @access Private (auth, isEnrolled)
@@ -117,12 +129,12 @@ exports.createDiscussion = async (req, res, next) => {
             return res.status(400).json({ success: false, message: 'courseId and content are required.' });
         }
 
-        // Verify enrollment (BR10)
-        const enrolled = await checkEnrolled(userId, courseId);
-        if (!enrolled) {
+        // Verify: enrolled, or instructor of course, or admin (so instructor can reply too)
+        const canParticipate = await checkCanParticipate(userId, courseId, req.user.role);
+        if (!canParticipate) {
             return res.status(403).json({
                 success: false,
-                message: 'You must be enrolled in this course to post a discussion.',
+                message: 'You must be enrolled in this course (or be the instructor) to post a discussion.',
             });
         }
 
@@ -171,12 +183,12 @@ exports.replyToDiscussion = async (req, res, next) => {
         // Use parent's courseId if not provided
         const targetCourseId = courseId || parent.courseId.toString();
 
-        // Verify enrollment (BR10)
-        const enrolled = await checkEnrolled(userId, targetCourseId);
-        if (!enrolled) {
+        // Verify: enrolled, or instructor of course, or admin (instructor can reply)
+        const canParticipate = await checkCanParticipate(userId, targetCourseId, req.user.role);
+        if (!canParticipate) {
             return res.status(403).json({
                 success: false,
-                message: 'You must be enrolled in this course to reply.',
+                message: 'You must be enrolled in this course (or be the instructor) to reply.',
             });
         }
 

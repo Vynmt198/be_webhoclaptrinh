@@ -52,6 +52,7 @@ exports.getCourseLearningData = async (req, res, next) => {
                 course: {
                     _id: course._id,
                     title: course.title,
+                    instructorId: course.instructorId ? course.instructorId.toString() : null,
                 },
                 lessons: lessonsWithQuizId,
                 progress,
