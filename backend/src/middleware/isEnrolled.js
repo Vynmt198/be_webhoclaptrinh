@@ -46,6 +46,16 @@ const isEnrolled = async (req, res, next) => {
         });
 
         if (!enrollment) {
+            // Allow instructor of this course (and admin) to access learn/discussion
+            if (req.user.role === 'admin') {
+                req.courseId = courseId;
+                return next();
+            }
+            const course = await Course.findById(courseId);
+            if (course && course.instructorId && course.instructorId.toString() === req.user._id.toString()) {
+                req.courseId = courseId;
+                return next();
+            }
             return res.status(403).json({
                 success: false,
                 message: 'Access denied. You are not enrolled in this course or your enrollment is inactive.'

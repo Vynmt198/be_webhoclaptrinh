@@ -18,7 +18,6 @@ import { ResetPassword } from '@/app/pages/ResetPassword';
 import { AuthCallback } from '@/app/pages/AuthCallback';
 import { Cart } from '@/app/pages/Cart';
 import { Checkout } from '@/app/pages/Checkout';
-import { OrderSuccess } from '@/app/pages/OrderSuccess';
 import { PaymentResult } from '@/app/pages/PaymentResult';
 import { About } from '@/app/pages/About';
 import { Contact } from '@/app/pages/Contact';
@@ -36,6 +35,7 @@ import { InstructorCourseCreate } from '@/app/pages/instructor/InstructorCourseC
 import { InstructorCourseEdit } from '@/app/pages/instructor/InstructorCourseEdit';
 import { InstructorAnalytics } from '@/app/pages/instructor/InstructorAnalytics';
 import { InstructorAnalyticsList } from '@/app/pages/instructor/InstructorAnalyticsList';
+
 export default function App() {
   return (
     <BrowserRouter>
@@ -55,6 +55,7 @@ export default function App() {
               <Route path="about" element={<About />} />
               <Route path="faq" element={<FAQ />} />
               <Route path="terms" element={<Terms />} />
+              <Route path="contact" element={<Contact />} />
 
               {/* Admin Routes (Wrapped in Layout + AdminLayout) */}
               <Route path="admin" element={<AdminLayout />}>
@@ -89,7 +90,6 @@ export default function App() {
             <Route path="assignments/:id" element={<AssignmentExam />} />
 
             {/* Success Route (No Layout) */}
-            <Route path="order-success" element={<OrderSuccess />} />
             <Route path="payment-result" element={<PaymentResult />} />
 
             {/* 404 Route */}

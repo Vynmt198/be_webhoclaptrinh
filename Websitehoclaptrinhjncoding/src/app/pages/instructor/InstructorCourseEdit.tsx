@@ -132,7 +132,7 @@ export function InstructorCourseEdit() {
     setLoadingAssignments(true);
     assignmentApi
       .listByCourse(id)
-      .then((res) => setAssignments(res.data?.assignments ?? []))
+      .then((res: { data?: { assignments?: Assignment[] } }) => setAssignments(res.data?.assignments ?? []))
       .catch(() => setAssignments([]))
       .finally(() => setLoadingAssignments(false));
   }, [id]);
@@ -250,7 +250,7 @@ export function InstructorCourseEdit() {
     setLoadingSubmissions(true);
     assignmentApi
       .getSubmissions(assignmentId)
-      .then((res) => setSubmissions(res.data?.submissions ?? []))
+      .then((res: { data?: { submissions?: AssignmentSubmission[] } }) => setSubmissions(res.data?.submissions ?? []))
       .catch(() => setSubmissions([]))
       .finally(() => setLoadingSubmissions(false));
   };
@@ -285,7 +285,7 @@ export function InstructorCourseEdit() {
         if (submissionsModalAssignmentId) {
           assignmentApi
             .getSubmissions(submissionsModalAssignmentId)
-            .then((res) => setSubmissions(res.data?.submissions ?? []));
+            .then((res: { data?: { submissions?: AssignmentSubmission[] } }) => setSubmissions(res.data?.submissions ?? []));
         }
       })
       .catch((err: Error) => toast.error(err?.message || 'Không thể lưu điểm.'))

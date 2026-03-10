@@ -46,6 +46,11 @@ const lessonSchema = new mongoose.Schema(
             type: Boolean,
             default: false,
         },
+        /** Admin moderation: hide lesson from learners/instructors UI */
+        isHidden: {
+            type: Boolean,
+            default: false,
+        },
     },
     { timestamps: true }
 );
