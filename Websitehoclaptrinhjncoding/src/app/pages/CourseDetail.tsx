@@ -231,6 +231,10 @@ export function CourseDetail() {
   const isInCart = course ? items.some((item: { id: string }) => item.id === course._id) : false;
 
   const isOwner = user && course && (course.instructorId?._id === user._id || user.role === 'admin');
+  const isLearner = !user || (user.role !== 'admin' && user.role !== 'instructor');
+  const isEnrolledInCourse = !!course?.isEnrolled || fromMyCourses;
+  const isCourseCompleted =
+    course?.enrollmentStatus === 'completed' || course?.hasCertificate === true;
   const handleSubmitForReview = () => {
     if (!course) return;
     setSubmitting(true);
@@ -387,24 +391,36 @@ export function CourseDetail() {
                     </>
                   )}
 
-                  {/* Chỉ learner (hoặc khách) thấy nút đăng ký / thêm giỏ; instructor và admin không thấy */}
-                  {user?.role !== 'admin' && user?.role !== 'instructor' && (
+                  {/* Chỉ learner (hoặc khách) thấy CTA */}
+                  {isLearner && (
                     <>
-                      <button
-                        onClick={handleEnroll}
-                        className="w-full py-4 bg-gradient-to-r from-blue-600 via-indigo-500 to-blue-500 text-white rounded-lg hover:shadow-2xl hover:shadow-blue-500/30 transition-all font-semibold flex items-center justify-center space-x-2 mb-3 btn-shine border-2 border-blue-500/20 hover:scale-[1.02] active:scale-95"
-                      >
-                        <ShoppingCart className="w-5 h-5" />
-                        <span>Đăng ký ngay</span>
-                      </button>
+                      {isEnrolledInCourse ? (
+                        <button
+                          onClick={() => navigate(`/learn/${course._id}`)}
+                          className="w-full py-4 bg-gradient-to-r from-emerald-600 via-emerald-500 to-emerald-500 text-white rounded-lg hover:shadow-2xl hover:shadow-emerald-500/30 transition-all font-semibold flex items-center justify-center space-x-2 mb-3 btn-shine border-2 border-emerald-500/20 hover:scale-[1.02] active:scale-95"
+                        >
+                          <Play className="w-5 h-5" />
+                          <span>{isCourseCompleted ? 'Xem lại khóa học' : 'Tiếp tục học'}</span>
+                        </button>
+                      ) : (
+                        <>
+                          <button
+                            onClick={handleEnroll}
+                            className="w-full py-4 bg-gradient-to-r from-blue-600 via-indigo-500 to-blue-500 text-white rounded-lg hover:shadow-2xl hover:shadow-blue-500/30 transition-all font-semibold flex items-center justify-center space-x-2 mb-3 btn-shine border-2 border-blue-500/20 hover:scale-[1.02] active:scale-95"
+                          >
+                            <ShoppingCart className="w-5 h-5" />
+                            <span>Đăng ký ngay</span>
+                          </button>
 
-                      <button
-                        onClick={handleAddToCart}
-                        disabled={isInCart}
-                        className="w-full py-4 border-2 border-primary/50 hover:border-primary bg-gradient-to-r from-primary/10 to-accent/10 text-foreground rounded-lg hover:bg-primary/20 transition-all font-semibold disabled:opacity-50 disabled:cursor-not-allowed btn-shine"
-                      >
-                        {isInCart ? 'Đã thêm vào giỏ' : 'Thêm vào giỏ hàng'}
-                      </button>
+                          <button
+                            onClick={handleAddToCart}
+                            disabled={isInCart}
+                            className="w-full py-4 border-2 border-primary/50 hover:border-primary bg-gradient-to-r from-primary/10 to-accent/10 text-foreground rounded-lg hover:bg-primary/20 transition-all font-semibold disabled:opacity-50 disabled:cursor-not-allowed btn-shine"
+                          >
+                            {isInCart ? 'Đã thêm vào giỏ' : 'Thêm vào giỏ hàng'}
+                          </button>
+                        </>
+                      )}
                     </>
                   )}
 

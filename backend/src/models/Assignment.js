@@ -2,7 +2,9 @@ const mongoose = require('mongoose');
 
 /**
  * Assignment - UC21 Create Assessments, UC22 Grade Assignments
- * Bài tập cần instructor chấm điểm (khác với Quiz auto-grade)
+ * type:
+ * - regular: bài tập tự luận / nộp link, instructor chấm điểm
+ * - exam: bài thi trắc nghiệm cuối khóa, hệ thống tự chấm
  */
 const assignmentSchema = new mongoose.Schema(
     {
@@ -35,6 +37,42 @@ const assignmentSchema = new mongoose.Schema(
         isActive: {
             type: Boolean,
             default: true,
+        },
+        type: {
+            type: String,
+            enum: ['regular', 'exam'],
+            default: 'regular',
+        },
+        // Chỉ dùng cho type = 'exam'
+        questions: [
+            {
+                questionText: {
+                    type: String,
+                    required: true,
+                },
+                options: [
+                    {
+                        type: String,
+                        required: true,
+                    },
+                ],
+                correctIndex: {
+                    type: Number,
+                    required: true,
+                },
+                points: {
+                    type: Number,
+                    default: 1,
+                },
+            },
+        ],
+        timeLimitMinutes: {
+            type: Number,
+            default: null,
+        },
+        passingScorePercent: {
+            type: Number,
+            default: 60,
         },
     },
     { timestamps: true }

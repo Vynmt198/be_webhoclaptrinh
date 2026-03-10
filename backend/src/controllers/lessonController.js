@@ -14,7 +14,7 @@ async function recalcCourseStats(courseId) {
 const createLesson = async (req, res, next) => {
     try {
         const courseId = req.params.id;
-        const { title, type, content, videoUrl, duration, order, isPreview } = req.body;
+        const { title, type, content, resources, videoUrl, duration, order, isPreview } = req.body;
         const maxOrder = await Lesson.findOne({ courseId }).sort({ order: -1 }).select('order');
         const nextOrder = order != null ? order : (maxOrder?.order || 0) + 1;
         const lesson = await Lesson.create({
@@ -22,6 +22,7 @@ const createLesson = async (req, res, next) => {
             title: title || 'Untitled Lesson',
             type: type || 'video',
             content: content || '',
+            resources: resources || '',
             videoUrl: videoUrl || '',
             duration: duration || 0,
             order: nextOrder,
@@ -37,11 +38,12 @@ const createLesson = async (req, res, next) => {
 
 const updateLesson = async (req, res, next) => {
     try {
-        const { title, type, content, videoUrl, duration, order, isPreview } = req.body;
+        const { title, type, content, resources, videoUrl, duration, order, isPreview } = req.body;
         const updateData = {};
         if (title !== undefined) updateData.title = title;
         if (type !== undefined) updateData.type = type;
         if (content !== undefined) updateData.content = content;
+        if (resources !== undefined) updateData.resources = resources;
         if (videoUrl !== undefined) updateData.videoUrl = videoUrl;
         if (duration !== undefined) updateData.duration = duration;
         if (order !== undefined) updateData.order = order;

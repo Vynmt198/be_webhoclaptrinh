@@ -1,13 +1,20 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { motion } from 'motion/react';
-import { User, Lock, BookOpen, Award, Settings, Bell, Loader2, Eye, EyeOff } from 'lucide-react';
+import { User, BookOpen, Award, Settings, Bell, Loader2, Eye, EyeOff } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAuth } from '@/app/context/AuthContext';
-import { userApi } from '@/app/lib/api';
+import { userApi, certificateApi, type Certificate } from '@/app/lib/api';
+import { useSearchParams, useNavigate } from 'react-router-dom';
 
 export function Account() {
   const { user, updateUser, logout } = useAuth();
-  const [activeTab, setActiveTab] = useState('profile');
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const initialTabFromQuery = searchParams.get('tab') ?? 'profile';
+  const [activeTab, setActiveTab] = useState(initialTabFromQuery);
+  const [certLoading, setCertLoading] = useState(false);
+  const [certificates, setCertificates] = useState<Certificate[]>([]);
+  const [certLoaded, setCertLoaded] = useState(false);
 
   // Profile form state
   const [profileForm, setProfileForm] = useState({
@@ -33,6 +40,15 @@ export function Account() {
       { id: 'settings', label: 'Cài đặt', icon: Settings },
     ])
   ];
+
+  // Đảm bảo tab đang active luôn là một trong các tab hợp lệ
+  useMemo(() => {
+    const validIds = tabs.map((t) => t.id);
+    if (!validIds.includes(activeTab)) {
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+      setActiveTab('profile');
+    }
+  }, [tabs, activeTab]);
 
   // Derive avatar initials
   const initials = user?.fullName
@@ -117,7 +133,22 @@ export function Account() {
                 {tabs.map((tab) => (
                   <button
                     key={tab.id}
-                    onClick={() => setActiveTab(tab.id)}
+                    onClick={() => {
+                      setActiveTab(tab.id);
+                      if (tab.id === 'certificates' && !certLoaded && !certLoading) {
+                        setCertLoading(true);
+                        certificateApi
+                          .myCertificates()
+                          .then((res) => {
+                            setCertificates(res.data?.certificates ?? []);
+                            setCertLoaded(true);
+                          })
+                          .catch((err: unknown) => {
+                            toast.error(err instanceof Error ? err.message : 'Không thể tải chứng chỉ.');
+                          })
+                          .finally(() => setCertLoading(false));
+                      }
+                    }}
                     className={`w-full flex items-center space-x-3 px-4 py-3 rounded-lg transition-all ${activeTab === tab.id
                       ? 'bg-primary text-primary-foreground'
                       : 'text-muted-foreground hover:bg-muted'
@@ -280,19 +311,41 @@ export function Account() {
               {activeTab === 'certificates' && (
                 <div>
                   <h2 className="text-2xl font-bold mb-6">Chứng chỉ</h2>
-                  <div className="grid md:grid-cols-2 gap-4">
-                    {[1, 2].map((item) => (
-                      <div
-                        key={item}
-                        className="p-6 border-2 border-primary/20 rounded-xl bg-gradient-to-br from-primary/5 to-accent/5"
-                      >
-                        <Award className="w-12 h-12 text-primary mb-4" />
-                        <h3 className="font-semibold mb-2">React & TypeScript</h3>
-                        <p className="text-sm text-muted-foreground mb-4">Hoàn thành: 15/01/2026</p>
-                        <button className="text-primary hover:underline text-sm">Tải xuống PDF</button>
-                      </div>
-                    ))}
-                  </div>
+                  {certLoading ? (
+                    <p className="text-sm text-muted-foreground">Đang tải chứng chỉ...</p>
+                  ) : certificates.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">Bạn chưa có chứng chỉ nào.</p>
+                  ) : (
+                    <div className="grid md:grid-cols-2 gap-4">
+                      {certificates.map((c) => (
+                        <div
+                          key={c._id}
+                          className="p-6 border-2 border-primary/20 rounded-xl bg-gradient-to-br from-primary/5 to-accent/5"
+                        >
+                          <Award className="w-12 h-12 text-primary mb-4" />
+                          <h3 className="font-semibold mb-1">{c.courseId?.title ?? 'Chứng chỉ'}</h3>
+                          <p className="text-xs text-muted-foreground mb-3">Mã: {c.certificateId}</p>
+                          <p className="text-sm text-muted-foreground mb-4">
+                            Ngày cấp: {c.issuedAt ? new Date(c.issuedAt).toLocaleDateString() : '—'}
+                          </p>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const courseId = c.courseId?._id;
+                              if (!courseId) {
+                                toast.error('Không tìm thấy khóa học của chứng chỉ này.');
+                                return;
+                              }
+                              navigate(`/courses/${courseId}/certificate`);
+                            }}
+                            className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-primary/10 text-primary hover:bg-primary/15 text-sm font-medium"
+                          >
+                            Xem chi tiết chứng chỉ
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               )}
 

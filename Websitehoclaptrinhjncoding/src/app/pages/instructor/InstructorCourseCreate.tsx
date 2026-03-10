@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'motion/react';
-import { Loader2 } from 'lucide-react';
+import { Loader2, X } from 'lucide-react';
 import { courseApi, categoryApi, uploadApi, Category } from '@/app/lib/api';
 import { toast } from 'sonner';
 
@@ -10,6 +10,8 @@ export function InstructorCourseCreate() {
   const [categories, setCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState(false);
   const [uploadingThumbnail, setUploadingThumbnail] = useState(false);
+  const [categoryModalOpen, setCategoryModalOpen] = useState(false);
+  const [newCategory, setNewCategory] = useState({ name: '', description: '' });
   const [form, setForm] = useState({
     title: '',
     description: '',
@@ -118,18 +120,30 @@ export function InstructorCourseCreate() {
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
             <label className="block text-sm font-medium mb-2">Danh mục *</label>
-            <select
-              value={form.categoryId}
-              onChange={(e) => setForm((f) => ({ ...f, categoryId: e.target.value }))}
-              className="w-full px-4 py-2 bg-card border border-border rounded-lg focus:ring-2 focus:ring-primary/50 outline-none"
-            >
-              <option value="">-- Chọn danh mục --</option>
-              {categories.map((c) => (
-                <option key={c._id} value={c._id}>
-                  {c.name}
-                </option>
-              ))}
-            </select>
+            <div className="space-y-2">
+              <select
+                value={form.categoryId}
+                onChange={(e) => setForm((f) => ({ ...f, categoryId: e.target.value }))}
+                className="w-full px-4 py-2 bg-card border border-border rounded-lg focus:ring-2 focus:ring-primary/50 outline-none"
+              >
+                <option value="">-- Chọn danh mục --</option>
+                {categories.map((c) => (
+                  <option key={c._id} value={c._id}>
+                    {c.name}
+                  </option>
+                ))}
+              </select>
+              <button
+                type="button"
+                onClick={() => {
+                  setNewCategory({ name: '', description: '' });
+                  setCategoryModalOpen(true);
+                }}
+                className="inline-flex items-center justify-center px-3 py-2 text-xs sm:text-sm border border-dashed border-border rounded-lg hover:bg-muted"
+              >
+                + Thêm danh mục
+              </button>
+            </div>
           </div>
           <div>
             <label className="block text-sm font-medium mb-2">Cấp độ</label>
@@ -230,6 +244,73 @@ export function InstructorCourseCreate() {
           </button>
         </div>
       </motion.form>
+
+      {categoryModalOpen && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
+          <div className="bg-card border border-border rounded-xl max-w-md w-full shadow-xl">
+            <div className="p-5 border-b border-border flex items-center justify-between">
+              <h2 className="text-lg font-semibold">Thêm danh mục mới</h2>
+              <button
+                type="button"
+                onClick={() => setCategoryModalOpen(false)}
+                className="p-2 hover:bg-muted rounded-lg"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <form
+              onSubmit={async (e) => {
+                e.preventDefault();
+                const name = newCategory.name.trim();
+                if (!name) {
+                  toast.error('Vui lòng nhập tên danh mục.');
+                  return;
+                }
+                try {
+                  const res = await categoryApi.create({
+                    name,
+                  });
+                  const created = res.data;
+                  setCategories((prev) => [...prev, created]);
+                  setForm((f) => ({ ...f, categoryId: created._id }));
+                  toast.success('Đã thêm danh mục mới.');
+                  setCategoryModalOpen(false);
+                } catch (err: unknown) {
+                  toast.error(err instanceof Error ? err.message : 'Không thể thêm danh mục.');
+                }
+              }}
+            >
+              <div className="p-5 space-y-4">
+                <div>
+                  <label className="block text-sm font-medium mb-2">Tên danh mục *</label>
+                  <input
+                    type="text"
+                    value={newCategory.name}
+                    onChange={(e) => setNewCategory((c) => ({ ...c, name: e.target.value }))}
+                    placeholder="VD: Web Development, Data Science..."
+                    className="w-full px-4 py-2 border border-border rounded-lg focus:ring-2 focus:ring-primary/50 outline-none"
+                  />
+                </div>
+              </div>
+              <div className="p-5 border-t border-border flex justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={() => setCategoryModalOpen(false)}
+                  className="px-4 py-2 border border-border rounded-lg hover:bg-muted text-sm font-medium"
+                >
+                  Hủy
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 text-sm font-medium"
+                >
+                  Lưu danh mục
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -18,6 +18,15 @@ exports.markLessonComplete = async (req, res, next) => {
             return res.status(404).json({ success: false, message: 'Lesson not found' });
         }
 
+        // With quiz lessons, completion must come from passing the quiz attempt.
+        // This prevents learners from manually marking quiz lessons as completed.
+        if (lesson.type === 'quiz') {
+            return res.status(400).json({
+                success: false,
+                message: 'Với bài học dạng quiz, bạn cần làm quiz và đạt để được tính là hoàn thành.',
+            });
+        }
+
         // Upsert progress
         const progress = await Progress.findOneAndUpdate(
             { userId: req.user._id, lessonId },

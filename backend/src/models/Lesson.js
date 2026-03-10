@@ -24,6 +24,11 @@ const lessonSchema = new mongoose.Schema(
             type: String,
             default: '',
         },
+        // Optional learning materials / references for this lesson (plain text or markdown)
+        resources: {
+            type: String,
+            default: '',
+        },
         videoUrl: {
             type: String,
             default: '',
