@@ -12,6 +12,11 @@ const paymentSchema = new mongoose.Schema(
             ref: 'Course',
             default: null,
         },
+        /** Multiple courses in one payment (cart). When set, enrollments created for each on success. */
+        courseIds: [{
+            type: mongoose.Schema.Types.ObjectId,
+            ref: 'Course',
+        }],
         enrollmentId: {
             type: mongoose.Schema.Types.ObjectId,
             ref: 'Enrollment',

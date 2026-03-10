@@ -1,32 +1,86 @@
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { motion } from 'motion/react';
 import {
   ArrowLeft,
-  Check,
   CheckCircle,
-  ChevronDown,
-  ChevronRight,
   Play,
   Lock,
   BookOpen
 } from 'lucide-react';
-import { getCourseById } from '@/app/data/courses';
+import { learningApi, type Lesson, type LessonProgress } from '@/app/lib/api';
+
+interface LearningState {
+  courseTitle: string;
+  lessons: Lesson[];
+  progressList: LessonProgress[];
+  completionPercentage: number;
+}
 
 export function Learn() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const course = getCourseById(id || '');
-  const [currentSection, setCurrentSection] = useState(0);
-  const [currentLesson, setCurrentLesson] = useState(0);
-  const [expandedSections, setExpandedSections] = useState<number[]>([0]);
-  const [completedLessons, setCompletedLessons] = useState<string[]>([]);
 
-  if (!course) {
+  const [state, setState] = useState<LearningState | null>(null);
+  const [currentLessonId, setCurrentLessonId] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const load = async () => {
+      if (!id) {
+        setError('Không tìm thấy khóa học');
+        setLoading(false);
+        return;
+      }
+      try {
+        setLoading(true);
+        const res = await learningApi.getCourseLearning(id);
+        const { course, lessons, progress, completionPercentage } = res.data;
+        setState({
+          courseTitle: course.title,
+          lessons,
+          progressList: progress,
+          completionPercentage: completionPercentage ?? 0,
+        });
+        if (lessons.length > 0) {
+          setCurrentLessonId(lessons[0]._id);
+        }
+      } catch (err: any) {
+        const msg = err?.message || 'Không thể tải dữ liệu khóa học.';
+        setError(msg);
+      } finally {
+        setLoading(false);
+      }
+    };
+    load();
+  }, [id]);
+
+  const completedLessonIds = useMemo(
+    () => new Set((state?.progressList || []).filter(p => p.isCompleted).map(p => p.lessonId)),
+    [state]
+  );
+
+  const totalLessons = state?.lessons.length ?? 0;
+  const progress = state?.completionPercentage ?? 0;
+
+  if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">
-          <h2 className="text-2xl font-bold mb-4">Không tìm thấy khóa học</h2>
+          <div className="w-10 h-10 border-4 border-muted border-t-primary rounded-full animate-spin mx-auto mb-4" />
+          <p className="text-muted-foreground">Đang tải nội dung khóa học...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (error || !state || totalLessons === 0) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <h2 className="text-2xl font-bold mb-4">
+            {error?.includes('Access denied') ? 'Bạn chưa đăng ký khóa học này' : 'Không tìm thấy khóa học'}
+          </h2>
           <button onClick={() => navigate('/my-courses')} className="text-primary hover:underline">
             Quay lại khóa học của tôi
           </button>
@@ -35,35 +89,11 @@ export function Learn() {
     );
   }
 
-  const toggleSection = (index: number) => {
-    setExpandedSections((prev) =>
-      prev.includes(index) ? prev.filter((i) => i !== index) : [...prev, index]
-    );
-  };
+  const currentIndex = state.lessons.findIndex(l => l._id === currentLessonId) ?? 0;
+  const safeIndex = currentIndex >= 0 ? currentIndex : 0;
+  const currentLesson = state.lessons[safeIndex];
 
-  const handleLessonComplete = (sectionIndex: number, lessonIndex: number) => {
-    const lessonId = `${sectionIndex}-${lessonIndex}`;
-    if (!completedLessons.includes(lessonId)) {
-      setCompletedLessons([...completedLessons, lessonId]);
-    }
-    // Auto advance to next lesson
-    if (lessonIndex < course.curriculum[sectionIndex].lessons.length - 1) {
-      setCurrentLesson(lessonIndex + 1);
-    } else if (sectionIndex < course.curriculum.length - 1) {
-      setCurrentSection(sectionIndex + 1);
-      setCurrentLesson(0);
-    }
-  };
-
-  const isLessonCompleted = (sectionIndex: number, lessonIndex: number) => {
-    return completedLessons.includes(`${sectionIndex}-${lessonIndex}`);
-  };
-
-  const currentSectionData = course.curriculum[currentSection];
-  const currentLessonData = currentSectionData?.lessons[currentLesson];
-
-  const totalLessons = course.curriculum.reduce((sum, section) => sum + section.lessons.length, 0);
-  const progress = Math.round((completedLessons.length / totalLessons) * 100);
+  const isCompleted = (lessonId: string) => completedLessonIds.has(lessonId);
 
   return (
     <div className="min-h-screen flex flex-col">
@@ -79,9 +109,9 @@ export function Learn() {
                 <ArrowLeft className="w-5 h-5" />
               </button>
               <div>
-                <h1 className="font-semibold line-clamp-1">{course.title}</h1>
+                <h1 className="font-semibold line-clamp-1">{state.courseTitle}</h1>
                 <p className="text-sm text-muted-foreground">
-                  {currentSectionData?.section} - {currentLessonData}
+                  Bài {safeIndex + 1} · {currentLesson?.title}
                 </p>
               </div>
             </div>
@@ -111,7 +141,7 @@ export function Learn() {
               <div className="w-24 h-24 bg-primary rounded-full flex items-center justify-center mx-auto mb-4">
                 <Play className="w-12 h-12 ml-2" />
               </div>
-              <h2 className="text-2xl font-bold mb-2">{currentLessonData}</h2>
+              <h2 className="text-2xl font-bold mb-2">{currentLesson?.title}</h2>
               <p className="text-white/70">Video player sẽ được tích hợp ở đây</p>
             </div>
           </div>
@@ -119,20 +149,21 @@ export function Learn() {
           <div className="p-6">
             <div className="max-w-4xl mx-auto">
               <div className="flex items-center justify-between mb-6">
-                <h2 className="text-2xl font-bold">{currentLessonData}</h2>
+                <h2 className="text-2xl font-bold">{currentLesson?.title}</h2>
                 <button
-                  onClick={() => handleLessonComplete(currentSection, currentLesson)}
+                  type="button"
                   className={`px-6 py-3 rounded-lg transition-colors flex items-center space-x-2 ${
-                    isLessonCompleted(currentSection, currentLesson)
+                    isCompleted(currentLesson._id)
                       ? 'bg-green-500/10 text-green-500'
                       : 'bg-primary text-primary-foreground hover:bg-primary/90'
                   }`}
+                  disabled
                 >
                   <CheckCircle className="w-5 h-5" />
                   <span>
-                    {isLessonCompleted(currentSection, currentLesson)
+                    {isCompleted(currentLesson._id)
                       ? 'Đã hoàn thành'
-                      : 'Hoàn thành bài học'}
+                      : 'Hoàn thành bài học (sẽ lưu tự động khi học xong)'}
                   </span>
                 </button>
               </div>
@@ -140,8 +171,7 @@ export function Learn() {
               <div className="bg-card border border-border rounded-xl p-6 mb-6">
                 <h3 className="font-semibold mb-4">Mô tả bài học</h3>
                 <p className="text-muted-foreground">
-                  Trong bài học này, bạn sẽ học về {currentLessonData.toLowerCase()}.
-                  Chúng ta sẽ đi sâu vào các khái niệm cơ bản và ứng dụng thực tế.
+                  Nội dung chi tiết của bài học sẽ được hiển thị tại đây khi bạn tích hợp dữ liệu video và mô tả từ backend.
                 </p>
               </div>
 
@@ -151,13 +181,7 @@ export function Learn() {
                   <li>
                     <a href="#" className="text-primary hover:underline flex items-center space-x-2">
                       <BookOpen className="w-4 h-4" />
-                      <span>Tài liệu 1.pdf</span>
-                    </a>
-                  </li>
-                  <li>
-                    <a href="#" className="text-primary hover:underline flex items-center space-x-2">
-                      <BookOpen className="w-4 h-4" />
-                      <span>Source code.zip</span>
+                      <span>Tài liệu sẽ được cập nhật</span>
                     </a>
                   </li>
                 </ul>
@@ -166,70 +190,45 @@ export function Learn() {
           </div>
         </div>
 
-        {/* Sidebar - Curriculum */}
+        {/* Sidebar - Lessons list */}
         <div className="w-80 bg-card border-l border-border overflow-y-auto">
           <div className="p-4 border-b border-border sticky top-0 bg-card z-10">
             <h3 className="font-semibold mb-2">Nội dung khóa học</h3>
             <div className="text-sm text-muted-foreground">
-              {completedLessons.length}/{totalLessons} bài học
+              {completedLessonIds.size}/{totalLessons} bài học
             </div>
           </div>
 
           <div className="divide-y divide-border">
-            {course.curriculum.map((section, sectionIndex) => (
-              <div key={sectionIndex}>
+            {state.lessons.map((lesson, index) => {
+              const active = lesson._id === currentLessonId;
+              const completed = isCompleted(lesson._id);
+              return (
                 <button
-                  onClick={() => toggleSection(sectionIndex)}
-                  className="w-full px-4 py-3 flex items-center justify-between hover:bg-muted/50 transition-colors"
+                  key={lesson._id}
+                  onClick={() => setCurrentLessonId(lesson._id)}
+                  className={`w-full px-4 py-3 flex items-center space-x-3 hover:bg-muted transition-colors ${
+                    active ? 'bg-primary/10 text-primary' : ''
+                  }`}
                 >
-                  <div className="flex items-center space-x-2 flex-1 text-left">
-                    {expandedSections.includes(sectionIndex) ? (
-                      <ChevronDown className="w-4 h-4" />
-                    ) : (
-                      <ChevronRight className="w-4 h-4" />
-                    )}
-                    <span className="font-medium text-sm">{section.section}</span>
-                  </div>
-                  <span className="text-xs text-muted-foreground">
-                    {section.lessons.filter((_, i) => isLessonCompleted(sectionIndex, i)).length}/
-                    {section.lessons.length}
+                  {completed ? (
+                    <CheckCircle className="w-4 h-4 text-green-500 flex-shrink-0" />
+                  ) : active ? (
+                    <Play className="w-4 h-4 flex-shrink-0" />
+                  ) : (
+                    <Lock className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+                  )}
+                  <span className="text-sm text-left flex-1 line-clamp-2">
+                    Bài {index + 1}: {lesson.title}
                   </span>
+                  {lesson.duration != null && (
+                    <span className="text-xs text-muted-foreground">
+                      {lesson.duration} phút
+                    </span>
+                  )}
                 </button>
-
-                {expandedSections.includes(sectionIndex) && (
-                  <div className="bg-muted/30">
-                    {section.lessons.map((lesson, lessonIndex) => {
-                      const isActive =
-                        sectionIndex === currentSection && lessonIndex === currentLesson;
-                      const isCompleted = isLessonCompleted(sectionIndex, lessonIndex);
-
-                      return (
-                        <button
-                          key={lessonIndex}
-                          onClick={() => {
-                            setCurrentSection(sectionIndex);
-                            setCurrentLesson(lessonIndex);
-                          }}
-                          className={`w-full px-4 py-3 pl-12 flex items-center space-x-3 hover:bg-muted transition-colors ${
-                            isActive ? 'bg-primary/10 text-primary' : ''
-                          }`}
-                        >
-                          {isCompleted ? (
-                            <CheckCircle className="w-4 h-4 text-green-500 flex-shrink-0" />
-                          ) : isActive ? (
-                            <Play className="w-4 h-4 flex-shrink-0" />
-                          ) : (
-                            <Lock className="w-4 h-4 text-muted-foreground flex-shrink-0" />
-                          )}
-                          <span className="text-sm text-left flex-1">{lesson}</span>
-                          <span className="text-xs text-muted-foreground">10:00</span>
-                        </button>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       </div>

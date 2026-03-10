@@ -5,7 +5,7 @@ const vnpayService = require('../services/vnpayService');
 
 exports.createPayment = async (req, res, next) => {
     try {
-        const { amount, courseId } = req.body;
+        const { amount, courseId, courseIds } = req.body;
         const userId = req.user._id;
 
         const orderId = `${Date.now()}_${userId}`;
@@ -16,12 +16,38 @@ exports.createPayment = async (req, res, next) => {
 
         console.log('Creating payment with IP:', ipAddr);
 
-        let orderInfo = 'Thanh toán';
-        if (courseId) {
-            const course = await Course.findById(courseId);
-            if (course) {
-                orderInfo = `Thanh toan khoa hoc: ${course.title}`;
+        const ids = Array.isArray(courseIds) && courseIds.length > 0
+            ? courseIds
+            : (courseId ? [courseId] : []);
+
+        // BR: Không cho mua lại khóa đã có enrollment active
+        if (ids.length > 0) {
+            const existingEnrollments = await Enrollment.find({
+                userId,
+                courseId: { $in: ids },
+                status: 'active',
+            }).populate('courseId', 'title');
+
+            if (existingEnrollments.length > 0) {
+                const titles = existingEnrollments
+                    .map((e) => e.courseId && e.courseId.title)
+                    .filter(Boolean)
+                    .join(', ');
+
+                return res.status(400).json({
+                    success: false,
+                    message: titles
+                        ? `Bạn đã mua khóa học: ${titles}. Vui lòng xóa khỏi giỏ hàng trước khi thanh toán.`
+                        : 'Bạn đã mua một hoặc nhiều khóa trong giỏ hàng này. Vui lòng xóa chúng khỏi giỏ trước khi thanh toán.',
+                });
             }
+        }
+
+        let orderInfo = 'Thanh toán';
+        if (ids.length > 0) {
+            const courses = await Course.find({ _id: { $in: ids } }).select('title').lean();
+            const titles = courses.map((c) => c.title).join(', ');
+            orderInfo = titles ? `Thanh toan khoa hoc: ${titles}` : orderInfo;
         }
 
         const payment = await Payment.create({
@@ -29,7 +55,8 @@ exports.createPayment = async (req, res, next) => {
             orderId,
             amount,
             orderInfo,
-            courseId: courseId || null,
+            courseId: ids[0] || null,
+            courseIds: ids,
         });
 
         const paymentUrl = vnpayService.createPaymentUrl(
@@ -82,13 +109,20 @@ exports.vnpayReturn = async (req, res, next) => {
         if (responseCode === '00') {
             payment.paymentStatus = 'success';
 
-            if (payment.courseId) {
-                const enrollment = await Enrollment.findOneAndUpdate(
-                    { userId: payment.userId, courseId: payment.courseId },
-                    { status: 'active' },
-                    { upsert: true, new: true }
-                );
-                payment.enrollmentId = enrollment._id;
+            const courseIdsToEnroll = (payment.courseIds && payment.courseIds.length > 0)
+                ? payment.courseIds
+                : (payment.courseId ? [payment.courseId] : []);
+            for (const cid of courseIdsToEnroll) {
+                let enrollment = await Enrollment.findOne({ userId: payment.userId, courseId: cid });
+                if (!enrollment) {
+                    enrollment = await Enrollment.create({ userId: payment.userId, courseId: cid, status: 'active' });
+                    await Course.findByIdAndUpdate(cid, { $inc: { enrollmentCount: 1 } });
+                } else {
+                    await Enrollment.updateOne({ _id: enrollment._id }, { status: 'active' });
+                }
+            }
+            if (courseIdsToEnroll.length > 0) {
+                payment.enrollmentId = (await Enrollment.findOne({ userId: payment.userId, courseId: courseIdsToEnroll[0], status: 'active' }))?._id || null;
             }
         } else {
             payment.paymentStatus = 'failed';
@@ -145,13 +179,20 @@ exports.vnpayReturnApi = async (req, res, next) => {
         if (responseCode === '00') {
             payment.paymentStatus = 'success';
 
-            if (payment.courseId) {
-                const enrollment = await Enrollment.findOneAndUpdate(
-                    { userId: payment.userId, courseId: payment.courseId },
-                    { status: 'active' },
-                    { upsert: true, new: true }
-                );
-                payment.enrollmentId = enrollment._id;
+            const courseIdsToEnroll = (payment.courseIds && payment.courseIds.length > 0)
+                ? payment.courseIds
+                : (payment.courseId ? [payment.courseId] : []);
+            for (const cid of courseIdsToEnroll) {
+                let enrollment = await Enrollment.findOne({ userId: payment.userId, courseId: cid });
+                if (!enrollment) {
+                    enrollment = await Enrollment.create({ userId: payment.userId, courseId: cid, status: 'active' });
+                    await Course.findByIdAndUpdate(cid, { $inc: { enrollmentCount: 1 } });
+                } else {
+                    await Enrollment.updateOne({ _id: enrollment._id }, { status: 'active' });
+                }
+            }
+            if (courseIdsToEnroll.length > 0) {
+                payment.enrollmentId = (await Enrollment.findOne({ userId: payment.userId, courseId: courseIdsToEnroll[0], status: 'active' }))?._id || null;
             }
         } else {
             payment.paymentStatus = 'failed';
@@ -208,13 +249,20 @@ exports.vnpayIPN = async (req, res, next) => {
             payment.cardType = vnp_Params.vnp_CardType;
             payment.vnpayData = vnp_Params;
 
-            if (payment.courseId) {
-                const enrollment = await Enrollment.findOneAndUpdate(
-                    { userId: payment.userId, courseId: payment.courseId },
-                    { status: 'active' },
-                    { upsert: true, new: true }
-                );
-                payment.enrollmentId = enrollment._id;
+            const courseIdsToEnroll = (payment.courseIds && payment.courseIds.length > 0)
+                ? payment.courseIds
+                : (payment.courseId ? [payment.courseId] : []);
+            for (const cid of courseIdsToEnroll) {
+                let enrollment = await Enrollment.findOne({ userId: payment.userId, courseId: cid });
+                if (!enrollment) {
+                    enrollment = await Enrollment.create({ userId: payment.userId, courseId: cid, status: 'active' });
+                    await Course.findByIdAndUpdate(cid, { $inc: { enrollmentCount: 1 } });
+                } else {
+                    await Enrollment.updateOne({ _id: enrollment._id }, { status: 'active' });
+                }
+            }
+            if (courseIdsToEnroll.length > 0) {
+                payment.enrollmentId = (await Enrollment.findOne({ userId: payment.userId, courseId: courseIdsToEnroll[0], status: 'active' }))?._id || null;
             }
 
             await payment.save();

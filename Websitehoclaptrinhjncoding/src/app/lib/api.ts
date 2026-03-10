@@ -299,6 +299,31 @@ export const lessonApi = {
         request<{ success: boolean }>(`/lessons/reorder`, { method: 'PUT', body: { courseId, lessons } }),
 };
 
+// ─── Learning (learner view) ──────────────────────────────────────────────
+
+export interface LessonProgress {
+    _id: string;
+    userId: string;
+    courseId: string;
+    lessonId: string;
+    isCompleted: boolean;
+    timeSpent?: number;
+    lastPosition?: number;
+    completedAt?: string;
+}
+
+export interface CourseLearningResponse {
+    course: { _id: string; title: string };
+    lessons: Lesson[];
+    progress: LessonProgress[];
+    completionPercentage: number;
+}
+
+export const learningApi = {
+    getCourseLearning: (courseId: string) =>
+        request<{ success: boolean; data: CourseLearningResponse }>(`/courses/${courseId}/learn`),
+};
+
 export interface Category {
     _id: string;
     name: string;
@@ -310,6 +335,23 @@ export interface Category {
 export const categoryApi = {
     list: () =>
         request<{ success: boolean; data: Category[] }>('/categories'),
+};
+
+/** Enrollment with populated course and progress (for learner "Khóa của tôi") */
+export interface EnrollmentWithCourse {
+    _id: string;
+    userId: string;
+    courseId: Course;
+    status: string;
+    progress: number;
+    completedLessons: number;
+    totalLessons: number;
+    updatedAt?: string;
+}
+
+export const enrollmentApi = {
+    getMyEnrollments: () =>
+        request<{ success: boolean; data: { enrollments: EnrollmentWithCourse[] } }>('/enrollments'),
 };
 
 export interface QuizQuestion {
