@@ -9,6 +9,8 @@ import { CourseDetail } from '@/app/pages/CourseDetail';
 import { MyCourses } from '@/app/pages/MyCourses';
 import { Account } from '@/app/pages/Account';
 import { Learn } from '@/app/pages/Learn';
+import { CourseCertificate } from '@/app/pages/CourseCertificate';
+import { AssignmentExam } from '@/app/pages/AssignmentExam';
 import { Login } from '@/app/pages/Login';
 import { Register } from '@/app/pages/Register';
 import { ForgotPassword } from '@/app/pages/ForgotPassword';
@@ -86,6 +88,8 @@ export default function App() {
 
             {/* Learning Route (No Layout) */}
             <Route path="learn/:id" element={<Learn />} />
+            <Route path="courses/:id/certificate" element={<CourseCertificate />} />
+            <Route path="assignments/:id" element={<AssignmentExam />} />
 
             {/* Success Route (No Layout) */}
             <Route path="payment-result" element={<PaymentResult />} />

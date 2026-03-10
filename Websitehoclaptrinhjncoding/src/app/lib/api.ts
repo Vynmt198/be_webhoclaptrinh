@@ -296,6 +296,10 @@ export interface Course {
     estimatedCompletionHours?: number;
     instructorId?: { _id: string; fullName: string; avatar?: string; email?: string };
     categoryId?: { _id: string; name: string; slug?: string };
+    /** Learner-specific flags (only when logged in & calling /courses/:id via optionalAuth) */
+    isEnrolled?: boolean;
+    enrollmentStatus?: 'pending' | 'active' | 'cancelled' | 'completed' | null;
+    hasCertificate?: boolean;
     createdAt?: string;
     updatedAt?: string;
 }
@@ -308,6 +312,8 @@ export interface Lesson {
     order?: number;
     isPreview?: boolean;
     content?: string;
+    /** Lesson-specific learning materials / references (plain text or markdown) */
+    resources?: string;
     videoUrl?: string;
     courseId?: string;
     /** Có khi lesson.type === 'quiz', dùng để gọi API làm quiz */
@@ -478,9 +484,9 @@ export const discussionApi = {
 export const lessonApi = {
     getById: (id: string) =>
         request<{ success: boolean; data: Lesson }>(`/lessons/by-id/${id}`),
-    create: (courseId: string, payload: { title?: string; type?: string; content?: string; videoUrl?: string; duration?: number; order?: number; isPreview?: boolean }) =>
+    create: (courseId: string, payload: { title?: string; type?: string; content?: string; resources?: string; videoUrl?: string; duration?: number; order?: number; isPreview?: boolean }) =>
         request<{ success: boolean; data: Lesson }>(`/courses/${courseId}/lessons`, { method: 'POST', body: payload as Record<string, unknown> }),
-    update: (id: string, payload: Partial<{ title: string; type: string; content: string; videoUrl: string; duration: number; order: number; isPreview: boolean }>) =>
+    update: (id: string, payload: Partial<{ title: string; type: string; content: string; resources: string; videoUrl: string; duration: number; order: number; isPreview: boolean }>) =>
         request<{ success: boolean; data: Lesson }>(`/lessons/${id}`, { method: 'PUT', body: payload as Record<string, unknown> }),
     delete: (id: string) =>
         request<{ success: boolean }>(`/lessons/${id}`, { method: 'DELETE' }),
@@ -526,6 +532,14 @@ export const progressApi = {
         }),
 };
 
+// Lesson content for learner view (includes full content/videoUrl)
+export const lessonContentApi = {
+    getContent: (lessonId: string) =>
+        request<{ success: boolean; data: { lesson: Lesson; progress: LessonProgress } }>(
+            `/lessons/${lessonId}/content`
+        ),
+};
+
 export interface Category {
     _id: string;
     name: string;
@@ -537,6 +551,11 @@ export interface Category {
 export const categoryApi = {
     list: () =>
         request<{ success: boolean; data: Category[] }>('/categories'),
+    create: (payload: { name: string; description?: string; icon?: string }) =>
+        request<{ success: boolean; data: Category }>('/categories', {
+            method: 'POST',
+            body: payload as Record<string, unknown>,
+        }),
 };
 
 /** Enrollment with populated course and progress (for learner "Khóa của tôi") */
@@ -558,7 +577,9 @@ export const enrollmentApi = {
 
 export interface QuizQuestion {
     questionText?: string;
-    type: string;
+    /** Optional code snippet shown in a styled box (e.g. programming quiz) */
+    questionCode?: string;
+    type?: string;
     options?: string[];
     correctAnswer?: unknown;
     explanation?: string;
@@ -572,6 +593,7 @@ export interface Quiz {
     questions: QuizQuestion[];
     passingScore: number;
     timeLimit?: number;
+    updatedAt?: string;
 }
 
 /** Quiz cho học viên: xem đề + nộp bài (có thể làm lại nhiều lần) */
@@ -700,6 +722,38 @@ export const paymentApi = {
         request<{ success: boolean; message: string; data: any }>(`/payments/vnpay-return${queryStr}`),
 };
 
+// ─── Certificates ─────────────────────────────────────────────────────────
+
+export interface Certificate {
+    _id: string;
+    userId?: { _id: string; fullName?: string; email?: string };
+    courseId?: { _id: string; title?: string; thumbnail?: string | null };
+    certificateId: string;
+    issuedAt: string;
+    verificationUrl?: string | null;
+    pdfUrl?: string | null;
+}
+
+export const certificateApi = {
+    myCertificates: () =>
+        request<{ success: boolean; data: { certificates: Certificate[]; total: number } }>(
+            '/certificates/my-certificates'
+        ),
+    generate: (courseId: string) =>
+        request<{ success: boolean; message: string; data: { certificate: Certificate } }>(
+            '/certificates/generate',
+            { method: 'POST', body: { courseId } }
+        ),
+    download: (id: string) =>
+        request<{ success: boolean; data: { certificate: Certificate } }>(
+            `/certificates/${id}/download`
+        ),
+    verify: (certId: string) =>
+        request<{ success: boolean; data: { certificate: { certificateId: string; issuedAt: string; holderName: string; courseName: string; verificationUrl?: string | null } } }>(
+            `/certificates/verify/${certId}`
+        ),
+};
+
 // ─── Assignments (instructor: create/grade; learner: submit) ─────────────────
 
 export interface Assignment {
@@ -711,6 +765,15 @@ export interface Assignment {
     maxScore: number;
     dueDate?: string | null;
     isActive: boolean;
+    type?: 'regular' | 'exam';
+    timeLimitMinutes?: number | null;
+    passingScorePercent?: number | null;
+    questions?: {
+        questionText: string;
+        options: string[];
+        correctIndex: number;
+        points?: number;
+    }[];
     createdAt?: string;
     updatedAt?: string;
 }
@@ -764,6 +827,12 @@ export const assignmentApi = {
     submit: (assignmentId: string, payload: { content?: string; attachments?: string[] }) =>
         request<{ success: boolean; data: { submission: AssignmentSubmission } }>(
             `/assignments/${assignmentId}/submit`,
+            { method: 'POST', body: payload as Record<string, unknown> }
+        ),
+    /** Learner: nộp bài thi trắc nghiệm cuối khóa (auto chấm điểm) */
+    submitExam: (assignmentId: string, payload: { answers: number[] }) =>
+        request<{ success: boolean; data: { submission: AssignmentSubmission; score: number; isPassed: boolean } }>(
+            `/assignments/${assignmentId}/submit-exam`,
             { method: 'POST', body: payload as Record<string, unknown> }
         ),
 };

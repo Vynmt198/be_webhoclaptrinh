@@ -12,10 +12,12 @@ const quizSchema = new mongoose.Schema({
     },
     questions: [{
         questionText: String,
+        /** Optional code snippet to display in a styled box (e.g. for programming quizzes) */
+        questionCode: { type: String, default: '' },
         type: {
             type: String,
             enum: ['multiple-choice', 'true-false', 'coding'],
-            required: true,
+            default: 'multiple-choice',
         },
         options: [String],
         correctAnswer: mongoose.Schema.Types.Mixed,

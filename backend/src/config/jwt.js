@@ -1,7 +1,9 @@
 const jwt = require('jsonwebtoken');
 
 const JWT_SECRET = process.env.JWT_SECRET;
-const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '30m';
+// Thời gian sống của access token (mặc định 24h).
+// Có thể override bằng biến môi trường JWT_EXPIRES_IN (ví dụ "12h", "7d", ...)
+const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '24h';
 
 /**
  * Generate a JWT token for a user

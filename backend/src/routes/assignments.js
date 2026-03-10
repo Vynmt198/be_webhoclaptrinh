@@ -48,4 +48,12 @@ router.post(
     assignmentController.submit
 );
 
+// Learner submit exam (multiple choice, auto-grade)
+router.post(
+    '/:id/submit-exam',
+    auth,
+    roleCheck.loadAssignment('id'),
+    assignmentController.submitExam
+);
+
 module.exports = router;
