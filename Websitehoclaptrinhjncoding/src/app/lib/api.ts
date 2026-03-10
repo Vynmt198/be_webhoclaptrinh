@@ -70,6 +70,13 @@ export const authApi = {
     forgotPassword: (email: string) =>
         request('/auth/forgot-password', { method: 'POST', body: { email } }),
 
+    /** Verify OTP/token before allowing new password step */
+    verifyResetOtp: (token: string) =>
+        request<{ success: boolean; message?: string }>('/auth/verify-reset-otp', {
+            method: 'POST',
+            body: { token },
+        }),
+
     resetPassword: (token: string, newPassword: string) =>
         request('/auth/reset-password', {
             method: 'POST',
@@ -86,7 +93,18 @@ export const userApi = {
     getProfileWithToken: (token: string) =>
         request<{ success: boolean; data: { user: User } }>('/users/profile', { token }),
 
-    updateProfile: (payload: { fullName?: string; avatar?: string }) =>
+    updateProfile: (payload: {
+        fullName?: string;
+        avatar?: string;
+        // Instructor profile (optional)
+        instructorHeadline?: string;
+        instructorBio?: string;
+        instructorSkills?: string[];
+        instructorWebsite?: string;
+        instructorFacebook?: string;
+        instructorYoutube?: string;
+        instructorLinkedin?: string;
+    }) =>
         request<{ success: boolean; data: { user: User } }>('/users/profile', {
             method: 'PUT',
             body: payload as Record<string, unknown>,
@@ -136,6 +154,14 @@ export interface User {
     role: 'learner' | 'instructor' | 'admin';
     isActive: boolean;
     avatar?: string;
+    // Instructor profile (optional)
+    instructorHeadline?: string;
+    instructorBio?: string;
+    instructorSkills?: string[];
+    instructorWebsite?: string;
+    instructorFacebook?: string;
+    instructorYoutube?: string;
+    instructorLinkedin?: string;
     createdAt?: string;
     lastLogin?: string;
 }
