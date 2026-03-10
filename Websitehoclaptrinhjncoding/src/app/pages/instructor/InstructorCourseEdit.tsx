@@ -1,9 +1,16 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { motion } from 'motion/react';
-import { Loader2, Plus, Pencil, Trash2, ChevronUp, ChevronDown, Video, FileText, HelpCircle, ClipboardList, Users } from 'lucide-react';
+import { Loader2, Plus, Pencil, Trash2, ChevronUp, ChevronDown, Video, FileText, HelpCircle, ClipboardList, Users, X } from 'lucide-react';
 import { courseApi, categoryApi, lessonApi, uploadApi, instructorQuizApi, assignmentApi, type Category, type Lesson, type Assignment, type AssignmentSubmission } from '@/app/lib/api';
 import { toast } from 'sonner';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/app/components/ui/select';
 
 export function InstructorCourseEdit() {
   const { id } = useParams<{ id: string }>();
@@ -20,6 +27,7 @@ export function InstructorCourseEdit() {
     type: 'video' as 'video' | 'text' | 'quiz',
     videoUrl: '',
     content: '',
+    resources: '',
     duration: 0,
     isPreview: false,
   });
@@ -29,7 +37,7 @@ export function InstructorCourseEdit() {
   const [quizForm, setQuizForm] = useState({
     title: '',
     passingScore: 80,
-    questions: [] as { questionText: string; options: string[]; correctIndex: number }[],
+    questions: [] as { questionText: string; questionCode: string; options: string[]; correctIndex: number }[],
   });
   const [loadingQuiz, setLoadingQuiz] = useState(false);
   const [savingQuiz, setSavingQuiz] = useState(false);
@@ -43,6 +51,10 @@ export function InstructorCourseEdit() {
     maxScore: 100,
     dueDate: '',
     lessonId: '',
+    type: 'regular' as 'regular' | 'exam',
+    timeLimitMinutes: '' as string | '',
+    passingScorePercent: 60 as number,
+    questionsJson: '',
   });
   const [savingAssignment, setSavingAssignment] = useState(false);
   const [submissionsModalAssignmentId, setSubmissionsModalAssignmentId] = useState<string | null>(null);
@@ -62,6 +74,8 @@ export function InstructorCourseEdit() {
     thumbnail: '',
     estimatedCompletionHours: 0,
   });
+  const [categoryModalOpen, setCategoryModalOpen] = useState(false);
+  const [newCategory, setNewCategory] = useState({ name: '', description: '' });
 
   useEffect(() => {
     categoryApi
@@ -129,7 +143,17 @@ export function InstructorCourseEdit() {
 
   const openAddAssignment = () => {
     setEditingAssignmentId(null);
-    setAssignmentForm({ title: '', description: '', maxScore: 100, dueDate: '', lessonId: '' });
+    setAssignmentForm({
+      title: '',
+      description: '',
+      maxScore: 100,
+      dueDate: '',
+      lessonId: '',
+      type: 'regular',
+      timeLimitMinutes: '',
+      passingScorePercent: 60,
+      questionsJson: '',
+    });
     setAssignmentModalOpen(true);
   };
 
@@ -141,6 +165,10 @@ export function InstructorCourseEdit() {
       maxScore: a.maxScore ?? 100,
       dueDate: a.dueDate ? a.dueDate.slice(0, 10) : '',
       lessonId: typeof a.lessonId === 'object' && a.lessonId?._id ? a.lessonId._id : '',
+      type: a.type ?? 'regular',
+      timeLimitMinutes: a.timeLimitMinutes != null ? String(a.timeLimitMinutes) : '',
+      passingScorePercent: a.passingScorePercent ?? 60,
+      questionsJson: a.questions ? JSON.stringify(a.questions, null, 2) : '',
     });
     setAssignmentModalOpen(true);
   };
@@ -152,13 +180,33 @@ export function InstructorCourseEdit() {
       return;
     }
     setSavingAssignment(true);
-    const payload = {
+    let parsedQuestions: unknown = undefined;
+    if (assignmentForm.type === 'exam' && assignmentForm.questionsJson.trim()) {
+      try {
+        parsedQuestions = JSON.parse(assignmentForm.questionsJson);
+      } catch {
+        toast.error('JSON câu hỏi không hợp lệ.');
+        setSavingAssignment(false);
+        return;
+      }
+    }
+    const payload: any = {
       title: assignmentForm.title.trim(),
       description: assignmentForm.description || undefined,
       maxScore: assignmentForm.maxScore || 100,
       dueDate: assignmentForm.dueDate || undefined,
       lessonId: assignmentForm.lessonId || undefined,
+      type: assignmentForm.type,
     };
+    if (assignmentForm.type === 'exam') {
+      payload.timeLimitMinutes = assignmentForm.timeLimitMinutes
+        ? Number(assignmentForm.timeLimitMinutes)
+        : undefined;
+      payload.passingScorePercent = assignmentForm.passingScorePercent ?? 60;
+      if (parsedQuestions) {
+        payload.questions = parsedQuestions;
+      }
+    }
     if (editingAssignmentId) {
       assignmentApi
         .update(editingAssignmentId, payload)
@@ -251,6 +299,7 @@ export function InstructorCourseEdit() {
       type: 'video',
       videoUrl: '',
       content: '',
+      resources: '',
       duration: 0,
       isPreview: false,
     });
@@ -268,6 +317,7 @@ export function InstructorCourseEdit() {
           type: (l.type as 'video' | 'text' | 'quiz') || 'video',
           videoUrl: l.videoUrl || '',
           content: l.content || '',
+          resources: l.resources || '',
           duration: l.duration || 0,
           isPreview: l.isPreview || false,
         });
@@ -289,6 +339,7 @@ export function InstructorCourseEdit() {
       type: lessonForm.type,
       videoUrl: lessonForm.type === 'video' ? lessonForm.videoUrl : undefined,
       content: lessonForm.type === 'text' ? lessonForm.content : undefined,
+      resources: lessonForm.resources || undefined,
       duration: lessonForm.duration || 0,
       isPreview: lessonForm.isPreview,
     };
@@ -361,6 +412,7 @@ export function InstructorCourseEdit() {
             const correctIndex = Math.min(3, Math.max(0, opts.indexOf(String(correctVal))));
             return {
               questionText: qn.questionText || '',
+              questionCode: (qn as { questionCode?: string }).questionCode ?? '',
               options: opts,
               correctIndex: correctIndex >= 0 ? correctIndex : 0,
             };
@@ -387,6 +439,7 @@ export function InstructorCourseEdit() {
         const correctIdx = Math.max(0, Math.min(q.correctIndex, opts.length - 1));
         return {
           questionText: q.questionText.trim(),
+          questionCode: (q.questionCode ?? '').trim(),
           type: 'multiple-choice' as const,
           options: opts,
           correctAnswer: (opts[correctIdx] ?? opts[0] ?? '').trim() || opts[0],
@@ -530,33 +583,57 @@ export function InstructorCourseEdit() {
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
             <label className="block text-sm font-medium mb-2">Danh mục {courseStatus === 'draft' ? '*' : ''}</label>
-            <select
-              value={form.categoryId}
-              onChange={(e) => setForm((f) => ({ ...f, categoryId: e.target.value }))}
-              className="w-full px-4 py-2 border border-border rounded-lg focus:ring-2 focus:ring-primary/50 outline-none disabled:opacity-60 disabled:cursor-not-allowed bg-muted/30"
-              disabled={courseStatus !== 'draft'}
-            >
-              <option value="">-- Chọn danh mục --</option>
-              {categories.map((c) => (
-                <option key={c._id} value={c._id}>
-                  {c.name}
-                </option>
-              ))}
-            </select>
+            <div className="space-y-2">
+              <Select
+                value={form.categoryId || 'none'}
+                onValueChange={(value: string) =>
+                  setForm((f) => ({ ...f, categoryId: value === 'none' ? '' : value }))
+                }
+                disabled={courseStatus !== 'draft'}
+              >
+                <SelectTrigger className="w-full bg-muted/30">
+                  <SelectValue placeholder="-- Chọn danh mục --" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">-- Chọn danh mục --</SelectItem>
+                  {categories.map((c) => (
+                    <SelectItem key={c._id} value={c._id}>
+                      {c.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {courseStatus === 'draft' && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setNewCategory({ name: '', description: '' });
+                    setCategoryModalOpen(true);
+                  }}
+                  className="inline-flex items-center justify-center px-3 py-2 text-xs sm:text-sm border border-dashed border-border rounded-lg hover:bg-muted"
+                >
+                  + Thêm danh mục
+                </button>
+              )}
+            </div>
           </div>
           <div>
             <label className="block text-sm font-medium mb-2">Cấp độ</label>
-            <select
+            <Select
               value={form.level}
-              onChange={(e) => setForm((f) => ({ ...f, level: e.target.value }))}
-              className="w-full px-4 py-2 border border-border rounded-lg focus:ring-2 focus:ring-primary/50 outline-none disabled:opacity-60 disabled:cursor-not-allowed bg-muted/30"
+              onValueChange={(value: string) => setForm((f) => ({ ...f, level: value }))}
               disabled={courseStatus !== 'draft'}
             >
-              <option value="beginner">Cơ bản</option>
-              <option value="intermediate">Trung cấp</option>
-              <option value="advanced">Nâng cao</option>
-              <option value="all-levels">Mọi cấp độ</option>
-            </select>
+              <SelectTrigger className="w-full bg-muted/30">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="beginner">Cơ bản</SelectItem>
+                <SelectItem value="intermediate">Trung cấp</SelectItem>
+                <SelectItem value="advanced">Nâng cao</SelectItem>
+                <SelectItem value="all-levels">Mọi cấp độ</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
         </div>
 
@@ -822,100 +899,152 @@ export function InstructorCourseEdit() {
       </motion.div>
 
       {lessonModalOpen && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4 sm:p-6">
           <motion.div
-            initial={{ opacity: 0, scale: 0.95 }}
+            initial={{ opacity: 0, scale: 0.97 }}
             animate={{ opacity: 1, scale: 1 }}
-            className="bg-card border border-border rounded-xl max-w-lg w-full max-h-[90vh] overflow-y-auto"
+            className="bg-card border border-border rounded-2xl max-w-3xl w-full max-h-[92vh] overflow-y-auto shadow-2xl"
           >
-            <div className="p-6 border-b border-border">
-              <h3 className="text-lg font-semibold">
+            <div className="sticky top-0 z-10 bg-card border-b border-border px-8 py-5">
+              <h2 className="text-xl font-bold">
                 {editingLessonId ? 'Chỉnh sửa bài học' : 'Thêm bài học'}
-              </h3>
+              </h2>
+              <p className="text-sm text-muted-foreground mt-0.5">Thông tin cơ bản và tài liệu cho bài học này</p>
             </div>
-            <form onSubmit={handleSaveLesson} className="p-6 space-y-4">
-              <div>
-                <label className="block text-sm font-medium mb-1">Tên bài học *</label>
-                <input
-                  type="text"
-                  value={lessonForm.title}
-                  onChange={(e) => setLessonForm((f) => ({ ...f, title: e.target.value }))}
-                  placeholder="VD: Giới thiệu khóa học"
-                  className="w-full px-3 py-2 border border-border rounded-lg focus:ring-2 focus:ring-primary/50 outline-none"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium mb-1">Loại</label>
-                <select
-                  value={lessonForm.type}
-                  onChange={(e) =>
-                    setLessonForm((f) => ({ ...f, type: e.target.value as 'video' | 'text' | 'quiz' }))
-                  }
-                  className="w-full px-3 py-2 border border-border rounded-lg focus:ring-2 focus:ring-primary/50 outline-none"
-                >
-                  <option value="video">Video</option>
-                  <option value="text">Văn bản</option>
-                  <option value="quiz">Quiz</option>
-                </select>
-              </div>
-              {lessonForm.type === 'video' && (
-                <div>
-                  <label className="block text-sm font-medium mb-1">URL video</label>
+            <form onSubmit={handleSaveLesson} className="p-8 space-y-8">
+              <section className="space-y-4">
+                <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">Thông tin bài học</h3>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+                  <div className="sm:col-span-2">
+                    <label className="block text-sm font-medium mb-2">Tên bài học *</label>
+                    <input
+                      type="text"
+                      value={lessonForm.title}
+                      onChange={(e) => setLessonForm((f) => ({ ...f, title: e.target.value }))}
+                      placeholder="VD: Bài 1 - Giới thiệu khóa học"
+                      className="w-full px-4 py-3 border border-border rounded-xl focus:ring-2 focus:ring-primary/50 outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium mb-2">Loại bài học</label>
+                    <Select
+                      value={lessonForm.type}
+                      onValueChange={(value: string) =>
+                        setLessonForm((f) => ({ ...f, type: value as 'video' | 'text' | 'quiz' }))
+                      }
+                    >
+                      <SelectTrigger className="w-full">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="video">Video</SelectItem>
+                        <SelectItem value="text">Văn bản</SelectItem>
+                        <SelectItem value="quiz">Quiz</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium mb-2">Thời lượng (giây)</label>
+                    <input
+                      type="number"
+                      min={0}
+                      value={lessonForm.duration || ''}
+                      onChange={(e) =>
+                        setLessonForm((f) => ({ ...f, duration: parseInt(e.target.value, 10) || 0 }))
+                      }
+                      placeholder="0"
+                      className="w-full px-4 py-3 border border-border rounded-xl focus:ring-2 focus:ring-primary/50 outline-none"
+                    />
+                  </div>
+                </div>
+                {lessonForm.type === 'video' && (
+                  <div>
+                    <label className="block text-sm font-medium mb-2">URL video (YouTube, v.v.)</label>
+                    <input
+                      type="url"
+                      value={lessonForm.videoUrl}
+                      onChange={(e) => setLessonForm((f) => ({ ...f, videoUrl: e.target.value }))}
+                      placeholder="https://www.youtube.com/..."
+                      className="w-full px-4 py-3 border border-border rounded-xl focus:ring-2 focus:ring-primary/50 outline-none"
+                    />
+                  </div>
+                )}
+                {lessonForm.type === 'text' && (
+                  <div>
+                    <label className="block text-sm font-medium mb-2">Nội dung</label>
+                    <textarea
+                      value={lessonForm.content}
+                      onChange={(e) => setLessonForm((f) => ({ ...f, content: e.target.value }))}
+                      placeholder="Nội dung bài học..."
+                      rows={5}
+                      className="w-full px-4 py-3 border border-border rounded-xl focus:ring-2 focus:ring-primary/50 outline-none resize-none"
+                    />
+                  </div>
+                )}
+                <label className="flex items-center gap-3 cursor-pointer py-2">
                   <input
-                    type="url"
-                    value={lessonForm.videoUrl}
-                    onChange={(e) => setLessonForm((f) => ({ ...f, videoUrl: e.target.value }))}
-                    placeholder="https://..."
-                    className="w-full px-3 py-2 border border-border rounded-lg focus:ring-2 focus:ring-primary/50 outline-none"
+                    type="checkbox"
+                    checked={lessonForm.isPreview}
+                    onChange={(e) => setLessonForm((f) => ({ ...f, isPreview: e.target.checked }))}
+                    className="rounded border-border w-4 h-4"
                   />
-                </div>
-              )}
-              {lessonForm.type === 'text' && (
-                <div>
-                  <label className="block text-sm font-medium mb-1">Nội dung</label>
-                  <textarea
-                    value={lessonForm.content}
-                    onChange={(e) => setLessonForm((f) => ({ ...f, content: e.target.value }))}
-                    placeholder="Nội dung bài học..."
-                    rows={4}
-                    className="w-full px-3 py-2 border border-border rounded-lg focus:ring-2 focus:ring-primary/50 outline-none resize-none"
-                  />
-                </div>
-              )}
-              <div>
-                <label className="block text-sm font-medium mb-1">Thời lượng (giây)</label>
-                <input
-                  type="number"
-                  min={0}
-                  value={lessonForm.duration || ''}
-                  onChange={(e) =>
-                    setLessonForm((f) => ({ ...f, duration: parseInt(e.target.value, 10) || 0 }))
-                  }
-                  className="w-full px-3 py-2 border border-border rounded-lg focus:ring-2 focus:ring-primary/50 outline-none"
+                  <span className="text-sm">Cho xem trước (miễn phí)</span>
+                </label>
+              </section>
+
+              <section className="space-y-4">
+                <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">Tài liệu tham khảo</h3>
+                <textarea
+                  value={lessonForm.resources}
+                  onChange={(e) => setLessonForm((f) => ({ ...f, resources: e.target.value }))}
+                  placeholder="Ghi chú tài liệu, link slide, repo, bài viết... Mỗi dòng một mục."
+                  rows={4}
+                  className="w-full px-4 py-3 border border-border rounded-xl focus:ring-2 focus:ring-primary/50 outline-none resize-none text-sm"
                 />
-              </div>
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={lessonForm.isPreview}
-                  onChange={(e) => setLessonForm((f) => ({ ...f, isPreview: e.target.checked }))}
-                  className="rounded border-border"
-                />
-                <span className="text-sm">Cho xem trước (miễn phí)</span>
-              </label>
-              <div className="flex gap-2 pt-2">
+              </section>
+
+              {lessonForm.type === 'quiz' && (
+                <section className="rounded-2xl border-2 border-primary/20 bg-primary/5 p-6 space-y-4">
+                  <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
+                    <HelpCircle className="w-5 h-5 text-primary" />
+                    Nội dung Quiz
+                  </h3>
+                  <p className="text-sm text-muted-foreground">
+                    Câu hỏi, đáp án, đoạn code (nếu có) và điểm đạt (%) được thiết lập trong bước riêng để dễ quản lý.
+                  </p>
+                  {editingLessonId ? (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setLessonModalOpen(false);
+                        setQuizModalLessonId(editingLessonId);
+                      }}
+                      className="w-full py-4 px-5 rounded-xl border-2 border-primary bg-primary text-primary-foreground hover:bg-primary/90 font-semibold flex items-center justify-center gap-3 text-base"
+                    >
+                      <HelpCircle className="w-5 h-5" />
+                      Mở thiết lập câu hỏi quiz (tiêu đề, câu hỏi, đáp án, điểm đạt)
+                    </button>
+                  ) : (
+                    <p className="text-sm text-muted-foreground bg-muted/30 rounded-xl p-4">
+                      Lưu bài học trước. Sau đó nhấn nút <strong>Thiết lập câu hỏi</strong> (icon ?) bên cạnh bài học trong danh sách để thêm câu hỏi, đáp án và điểm đạt.
+                    </p>
+                  )}
+                </section>
+              )}
+
+              <div className="flex flex-wrap gap-3 pt-4 border-t border-border">
                 <button
                   type="submit"
                   disabled={savingLesson}
-                  className="px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 disabled:opacity-50 flex items-center gap-2"
+                  className="px-6 py-3 bg-primary text-primary-foreground rounded-xl hover:bg-primary/90 disabled:opacity-50 flex items-center gap-2 font-medium"
                 >
                   {savingLesson && <Loader2 className="w-4 h-4 animate-spin" />}
-                  {editingLessonId ? 'Lưu' : 'Thêm'}
+                  {editingLessonId ? 'Lưu thay đổi' : 'Thêm bài học'}
                 </button>
                 <button
                   type="button"
                   onClick={() => setLessonModalOpen(false)}
-                  className="px-4 py-2 border border-border rounded-lg hover:bg-muted"
+                  className="px-6 py-3 border border-border rounded-xl hover:bg-muted font-medium"
                 >
                   Hủy
                 </button>
@@ -925,65 +1054,148 @@ export function InstructorCourseEdit() {
         </div>
       )}
 
-      {quizModalLessonId && (
+      {/* Modal: Thêm danh mục mới */}
+      {categoryModalOpen && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
-          <motion.div
-            initial={{ opacity: 0, scale: 0.95 }}
-            animate={{ opacity: 1, scale: 1 }}
-            className="bg-card border border-border rounded-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto"
-          >
-            <div className="p-6 border-b border-border">
-              <h3 className="text-lg font-semibold">Thiết lập câu hỏi Quiz</h3>
+          <div className="bg-card border border-border rounded-xl max-w-md w-full shadow-xl">
+            <div className="p-5 border-b border-border flex items-center justify-between">
+              <h2 className="text-lg font-semibold">Thêm danh mục mới</h2>
+              <button
+                type="button"
+                onClick={() => setCategoryModalOpen(false)}
+                className="p-2 hover:bg-muted rounded-lg"
+              >
+                <X className="w-4 h-4" />
+              </button>
             </div>
-            <form onSubmit={handleSaveQuiz} className="p-6 space-y-4">
+            <form
+              onSubmit={async (e) => {
+                e.preventDefault();
+                const name = newCategory.name.trim();
+                if (!name) {
+                  toast.error('Vui lòng nhập tên danh mục.');
+                  return;
+                }
+                try {
+                  const res = await categoryApi.create({
+                    name,
+                    description: newCategory.description.trim() || undefined,
+                  });
+                  const created = res.data;
+                  setCategories((prev) => [...prev, created]);
+                  setForm((f) => ({ ...f, categoryId: created._id }));
+                  toast.success('Đã thêm danh mục mới.');
+                  setCategoryModalOpen(false);
+                } catch (err: unknown) {
+                  toast.error(err instanceof Error ? err.message : 'Không thể thêm danh mục.');
+                }
+              }}
+            >
+              <div className="p-5 space-y-4">
+                <div>
+                  <label className="block text-sm font-medium mb-2">Tên danh mục *</label>
+                  <input
+                    type="text"
+                    value={newCategory.name}
+                    onChange={(e) => setNewCategory((c) => ({ ...c, name: e.target.value }))}
+                    placeholder="VD: JavaScript, Frontend, Backend..."
+                    className="w-full px-4 py-2 border border-border rounded-lg focus:ring-2 focus:ring-primary/50 outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium mb-2">Mô tả (tùy chọn)</label>
+                  <textarea
+                    rows={3}
+                    value={newCategory.description}
+                    onChange={(e) => setNewCategory((c) => ({ ...c, description: e.target.value }))}
+                    className="w-full px-4 py-2 border border-border rounded-lg focus:ring-2 focus:ring-primary/50 outline-none resize-none"
+                    placeholder="Mô tả ngắn về danh mục này..."
+                  />
+                </div>
+              </div>
+              <div className="p-5 border-t border-border flex justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={() => setCategoryModalOpen(false)}
+                  className="px-4 py-2 border border-border rounded-lg hover:bg-muted text-sm font-medium"
+                >
+                  Hủy
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 text-sm font-medium"
+                >
+                  Lưu danh mục
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {quizModalLessonId && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4 sm:p-6">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.97 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="bg-card border border-border rounded-2xl max-w-4xl w-full max-h-[92vh] overflow-hidden flex flex-col shadow-2xl"
+          >
+            <div className="shrink-0 px-8 py-5 border-b border-border">
+              <h2 className="text-xl font-bold">Thiết lập câu hỏi Quiz</h2>
+              <p className="text-sm text-muted-foreground mt-0.5">Thêm câu hỏi, đáp án và đoạn code (nếu có) cho bài quiz này</p>
+            </div>
+            <form onSubmit={handleSaveQuiz} className="flex flex-col flex-1 min-h-0 overflow-y-auto">
               {loadingQuiz ? (
-                <div className="flex justify-center py-8">
-                  <Loader2 className="w-8 h-8 text-primary animate-spin" />
+                <div className="flex justify-center py-16">
+                  <Loader2 className="w-10 h-10 text-primary animate-spin" />
                 </div>
               ) : (
-                <>
-                  <div>
-                    <label className="block text-sm font-medium mb-1">Tiêu đề quiz</label>
-                    <input
-                      type="text"
-                      value={quizForm.title}
-                      onChange={(e) => setQuizForm((f) => ({ ...f, title: e.target.value }))}
-                      className="w-full px-3 py-2 border border-border rounded-lg focus:ring-2 focus:ring-primary/50 outline-none"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium mb-1">Điểm đạt (%)</label>
-                    <input
-                      type="number"
-                      min={0}
-                      max={100}
-                      value={quizForm.passingScore}
-                      onChange={(e) =>
-                        setQuizForm((f) => ({ ...f, passingScore: parseInt(e.target.value, 10) || 0 }))
-                      }
-                      className="w-24 px-3 py-2 border border-border rounded-lg focus:ring-2 focus:ring-primary/50 outline-none"
-                    />
-                  </div>
-                  <div>
-                    <div className="flex items-center justify-between mb-2">
-                      <label className="text-sm font-medium">Câu hỏi</label>
+                <div className="p-8 space-y-8">
+                  <section className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                    <div>
+                      <label className="block text-sm font-medium mb-2">Tiêu đề quiz</label>
+                      <input
+                        type="text"
+                        value={quizForm.title}
+                        onChange={(e) => setQuizForm((f) => ({ ...f, title: e.target.value }))}
+                        placeholder="VD: Ôn tập toán tử ++ và --"
+                        className="w-full px-4 py-3 border border-border rounded-xl focus:ring-2 focus:ring-primary/50 outline-none"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium mb-2">Điểm đạt (%)</label>
+                      <input
+                        type="number"
+                        min={0}
+                        max={100}
+                        value={quizForm.passingScore}
+                        onChange={(e) =>
+                          setQuizForm((f) => ({ ...f, passingScore: parseInt(e.target.value, 10) || 0 }))
+                        }
+                        className="w-full sm:w-32 px-4 py-3 border border-border rounded-xl focus:ring-2 focus:ring-primary/50 outline-none"
+                      />
+                    </div>
+                  </section>
+                  <section>
+                    <div className="flex items-center justify-between mb-4">
+                      <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">Câu hỏi</h3>
                       <button
                         type="button"
                         onClick={() =>
                           setQuizForm((f) => ({
                             ...f,
-                            questions: [...f.questions, { questionText: '', options: ['', '', '', ''], correctIndex: 0 }],
+                            questions: [...f.questions, { questionText: '', questionCode: '', options: ['', '', '', ''], correctIndex: 0 }],
                           }))
                         }
-                        className="text-sm text-primary hover:underline"
+                        className="text-sm font-medium text-primary hover:underline flex items-center gap-1"
                       >
                         + Thêm câu hỏi
                       </button>
                     </div>
-                    <div className="space-y-4">
+                    <div className="space-y-6">
                       {quizForm.questions.map((q, qIdx) => (
-                        <div key={qIdx} className="p-4 rounded-lg border border-border bg-muted/20 space-y-2">
-                          <div className="flex justify-between items-start gap-2">
+                        <div key={qIdx} className="p-6 rounded-xl border border-border bg-muted/20 space-y-4">
+                          <div className="flex justify-between items-start gap-3">
                             <input
                               type="text"
                               value={q.questionText}
@@ -993,7 +1205,7 @@ export function InstructorCourseEdit() {
                                 setQuizForm((f) => ({ ...f, questions: next }));
                               }}
                               placeholder={`Nội dung câu hỏi ${qIdx + 1}`}
-                              className="flex-1 px-3 py-2 border border-border rounded-lg text-sm"
+                              className="flex-1 px-4 py-3 border border-border rounded-xl text-sm"
                             />
                             <button
                               type="button"
@@ -1003,14 +1215,29 @@ export function InstructorCourseEdit() {
                                   questions: f.questions.filter((_, i) => i !== qIdx),
                                 }))
                               }
-                              className="p-1.5 rounded border border-border hover:bg-destructive/10 text-muted-foreground hover:text-destructive"
+                              className="p-2 rounded-lg border border-border hover:bg-destructive/10 text-muted-foreground hover:text-destructive shrink-0"
+                              title="Xóa câu hỏi"
                             >
-                              <Trash2 className="w-4 h-4" />
+                              <Trash2 className="w-5 h-5" />
                             </button>
                           </div>
-                          <div className="grid grid-cols-2 gap-2 pl-2">
+                          <div>
+                            <label className="block text-xs font-medium text-muted-foreground mb-2">Đoạn code (tùy chọn) — hiển thị trong ô code cho học viên</label>
+                            <textarea
+                              value={q.questionCode}
+                              onChange={(e) => {
+                                const next = [...quizForm.questions];
+                                next[qIdx] = { ...next[qIdx], questionCode: e.target.value };
+                                setQuizForm((f) => ({ ...f, questions: next }));
+                              }}
+                              placeholder="var a = 1;&#10;console.log(a);"
+                              rows={3}
+                              className="w-full px-4 py-3 border border-border rounded-xl text-sm font-mono bg-background"
+                            />
+                          </div>
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                             {[0, 1, 2, 3].map((optIdx) => (
-                              <label key={optIdx} className="flex items-center gap-2">
+                              <label key={optIdx} className="flex items-center gap-3 p-3 rounded-lg border border-border bg-background/50 hover:border-primary/30 cursor-pointer">
                                 <input
                                   type="radio"
                                   name={`correct-${qIdx}`}
@@ -1020,6 +1247,7 @@ export function InstructorCourseEdit() {
                                     next[qIdx] = { ...next[qIdx], correctIndex: optIdx };
                                     setQuizForm((f) => ({ ...f, questions: next }));
                                   }}
+                                  className="w-4 h-4"
                                 />
                                 <input
                                   type="text"
@@ -1032,7 +1260,7 @@ export function InstructorCourseEdit() {
                                     setQuizForm((f) => ({ ...f, questions: next }));
                                   }}
                                   placeholder={`Đáp án ${optIdx + 1}`}
-                                  className="flex-1 px-2 py-1 border border-border rounded text-sm"
+                                  className="flex-1 px-3 py-2 border-0 bg-transparent focus:ring-0 outline-none text-sm"
                                 />
                               </label>
                             ))}
@@ -1040,25 +1268,27 @@ export function InstructorCourseEdit() {
                         </div>
                       ))}
                     </div>
-                  </div>
-                  <div className="flex gap-2 pt-4">
-                    <button
-                      type="submit"
-                      disabled={savingQuiz}
-                      className="px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 disabled:opacity-50 flex items-center gap-2"
-                    >
-                      {savingQuiz && <Loader2 className="w-4 h-4 animate-spin" />}
-                      Lưu quiz
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setQuizModalLessonId(null)}
-                      className="px-4 py-2 border border-border rounded-lg hover:bg-muted"
-                    >
-                      Đóng
-                    </button>
-                  </div>
-                </>
+                  </section>
+                </div>
+              )}
+              {!loadingQuiz && (
+                <div className="shrink-0 px-8 py-5 border-t border-border bg-muted/20 flex flex-wrap gap-3">
+                  <button
+                    type="submit"
+                    disabled={savingQuiz}
+                    className="px-6 py-3 bg-primary text-primary-foreground rounded-xl hover:bg-primary/90 disabled:opacity-50 flex items-center gap-2 font-medium"
+                  >
+                    {savingQuiz && <Loader2 className="w-4 h-4 animate-spin" />}
+                    Lưu quiz
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setQuizModalLessonId(null)}
+                    className="px-6 py-3 border border-border rounded-xl hover:bg-muted font-medium"
+                  >
+                    Đóng
+                  </button>
+                </div>
               )}
             </form>
           </motion.div>
@@ -1066,41 +1296,149 @@ export function InstructorCourseEdit() {
       )}
 
       {assignmentModalOpen && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4 sm:p-6">
           <motion.div
-            initial={{ opacity: 0, scale: 0.95 }}
+            initial={{ opacity: 0, scale: 0.97 }}
             animate={{ opacity: 1, scale: 1 }}
-            className="bg-card border border-border rounded-xl max-w-lg w-full max-h-[90vh] overflow-y-auto"
+            className="bg-card border border-border rounded-2xl max-w-2xl w-full max-h-[92vh] overflow-y-auto shadow-2xl"
           >
-            <div className="p-6 border-b border-border">
-              <h3 className="text-lg font-semibold">
+            <div className="sticky top-0 z-10 bg-card border-b border-border px-8 py-5">
+              <h2 className="text-xl font-bold">
                 {editingAssignmentId ? 'Chỉnh sửa bài tập' : 'Thêm bài tập'}
-              </h3>
+              </h2>
+              <p className="text-sm text-muted-foreground mt-0.5">Học viên cần pass hết quiz mới được nộp bài tập</p>
             </div>
-            <form onSubmit={handleSaveAssignment} className="p-6 space-y-4">
-              <div>
-                <label className="block text-sm font-medium mb-1">Tên bài tập *</label>
-                <input
-                  type="text"
-                  value={assignmentForm.title}
-                  onChange={(e) => setAssignmentForm((f) => ({ ...f, title: e.target.value }))}
-                  placeholder="VD: Bài tập tuần 1"
-                  className="w-full px-3 py-2 border border-border rounded-lg focus:ring-2 focus:ring-primary/50 outline-none"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium mb-1">Mô tả / yêu cầu</label>
-                <textarea
-                  value={assignmentForm.description}
-                  onChange={(e) => setAssignmentForm((f) => ({ ...f, description: e.target.value }))}
-                  placeholder="Mô tả bài tập, yêu cầu nộp..."
-                  rows={3}
-                  className="w-full px-3 py-2 border border-border rounded-lg focus:ring-2 focus:ring-primary/50 outline-none resize-none"
-                />
-              </div>
-              <div className="grid grid-cols-2 gap-4">
+            <form onSubmit={handleSaveAssignment} className="p-8 space-y-6">
+              <section className="space-y-4">
+                <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">Thông tin bài tập</h3>
                 <div>
-                  <label className="block text-sm font-medium mb-1">Điểm tối đa</label>
+                  <label className="block text-sm font-medium mb-2">Tên bài tập *</label>
+                  <input
+                    type="text"
+                    value={assignmentForm.title}
+                    onChange={(e) => setAssignmentForm((f) => ({ ...f, title: e.target.value }))}
+                    placeholder="VD: Bài tập tuần 1 - Làm form đăng ký"
+                    className="w-full px-4 py-3 border border-border rounded-xl focus:ring-2 focus:ring-primary/50 outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium mb-2">Mô tả / yêu cầu</label>
+                  <textarea
+                    value={assignmentForm.description}
+                    onChange={(e) => setAssignmentForm((f) => ({ ...f, description: e.target.value }))}
+                    placeholder="Mô tả bài tập, yêu cầu nộp (nội dung, link code...)"
+                    rows={5}
+                    className="w-full px-4 py-3 border border-border rounded-xl focus:ring-2 focus:ring-primary/50 outline-none resize-none"
+                  />
+                </div>
+              </section>
+              <section className="space-y-3">
+                <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">Loại bài tập</h3>
+                <div className="flex flex-wrap gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setAssignmentForm((f) => ({ ...f, type: 'regular' }))}
+                    className={`px-3 py-1.5 rounded-full text-xs font-medium border ${
+                      assignmentForm.type === 'regular'
+                        ? 'bg-primary text-primary-foreground border-primary'
+                        : 'border-border text-muted-foreground hover:bg-muted'
+                    }`}
+                  >
+                    Bài tập thường
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setAssignmentForm((f) => ({ ...f, type: 'exam' }))}
+                    className={`px-3 py-1.5 rounded-full text-xs font-medium border ${
+                      assignmentForm.type === 'exam'
+                        ? 'bg-primary text-primary-foreground border-primary'
+                        : 'border-border text-muted-foreground hover:bg-muted'
+                    }`}
+                  >
+                    Bài thi cuối khóa (trắc nghiệm)
+                  </button>
+                </div>
+                {assignmentForm.type === 'exam' && (
+                  <div className="mt-2 space-y-4 rounded-2xl border border-dashed border-primary/40 bg-primary/5 p-4">
+                    <p className="text-xs text-muted-foreground">
+                      Thiết lập bài thi trắc nghiệm cho cuối khóa. Có thể nhập JSON câu hỏi thủ công hoặc import từ file.
+                    </p>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium mb-1">Thời gian làm bài (phút)</label>
+                        <input
+                          type="number"
+                          min={1}
+                          value={assignmentForm.timeLimitMinutes}
+                          onChange={(e) =>
+                            setAssignmentForm((f) => ({ ...f, timeLimitMinutes: e.target.value }))
+                          }
+                          placeholder="VD: 60"
+                          className="w-full px-3 py-2 border border-border rounded-lg focus:ring-2 focus:ring-primary/50 outline-none text-sm"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium mb-1">Điểm đạt tối thiểu (%)</label>
+                        <input
+                          type="number"
+                          min={1}
+                          max={100}
+                          value={assignmentForm.passingScorePercent}
+                          onChange={(e) =>
+                            setAssignmentForm((f) => ({
+                              ...f,
+                              passingScorePercent: parseInt(e.target.value, 10) || 60,
+                            }))
+                          }
+                          className="w-full px-3 py-2 border border-border rounded-lg focus:ring-2 focus:ring-primary/50 outline-none text-sm"
+                        />
+                      </div>
+                    </div>
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between gap-2">
+                        <label className="block text-sm font-medium">Câu hỏi trắc nghiệm (JSON)</label>
+                        <label className="text-xs text-primary hover:underline cursor-pointer">
+                          Import từ file JSON
+                          <input
+                            type="file"
+                            accept="application/json"
+                            className="hidden"
+                            onChange={(e) => {
+                              const file = e.target.files?.[0];
+                              if (!file) return;
+                              const reader = new FileReader();
+                              reader.onload = () => {
+                                try {
+                                  const text = String(reader.result || '');
+                                  JSON.parse(text);
+                                  setAssignmentForm((f) => ({ ...f, questionsJson: text }));
+                                  toast.success('Đã import file câu hỏi.');
+                                } catch {
+                                  toast.error('File JSON không hợp lệ.');
+                                }
+                              };
+                              reader.readAsText(file, 'utf-8');
+                              e.target.value = '';
+                            }}
+                          />
+                        </label>
+                      </div>
+                      <textarea
+                        value={assignmentForm.questionsJson}
+                        onChange={(e) =>
+                          setAssignmentForm((f) => ({ ...f, questionsJson: e.target.value }))
+                        }
+                        rows={8}
+                        className="w-full px-3 py-2 border border-border rounded-lg focus:ring-2 focus:ring-primary/50 outline-none text-xs font-mono bg-background"
+                        placeholder='[{"questionText":"...","options":["A","B","C","D"],"correctIndex":0,"points":1}]'
+                      />
+                    </div>
+                  </div>
+                )}
+              </section>
+              <section className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+                <div>
+                  <label className="block text-sm font-medium mb-2">Điểm tối đa</label>
                   <input
                     type="number"
                     min={1}
@@ -1108,47 +1446,53 @@ export function InstructorCourseEdit() {
                     onChange={(e) =>
                       setAssignmentForm((f) => ({ ...f, maxScore: parseInt(e.target.value, 10) || 100 }))
                     }
-                    className="w-full px-3 py-2 border border-border rounded-lg focus:ring-2 focus:ring-primary/50 outline-none"
+                    className="w-full px-4 py-3 border border-border rounded-xl focus:ring-2 focus:ring-primary/50 outline-none"
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium mb-1">Hạn nộp (tùy chọn)</label>
+                  <label className="block text-sm font-medium mb-2">Hạn nộp (tùy chọn)</label>
                   <input
                     type="date"
                     value={assignmentForm.dueDate}
                     onChange={(e) => setAssignmentForm((f) => ({ ...f, dueDate: e.target.value }))}
-                    className="w-full px-3 py-2 border border-border rounded-lg focus:ring-2 focus:ring-primary/50 outline-none"
+                    className="w-full px-4 py-3 border border-border rounded-xl focus:ring-2 focus:ring-primary/50 outline-none"
                   />
                 </div>
-              </div>
-              <div>
-                <label className="block text-sm font-medium mb-1">Gắn với bài học (tùy chọn)</label>
-                <select
-                  value={assignmentForm.lessonId}
-                  onChange={(e) => setAssignmentForm((f) => ({ ...f, lessonId: e.target.value }))}
-                  className="w-full px-3 py-2 border border-border rounded-lg focus:ring-2 focus:ring-primary/50 outline-none"
+              </section>
+              <section>
+                <label className="block text-sm font-medium mb-2">Gắn với bài học (tùy chọn)</label>
+                <Select
+                  value={assignmentForm.lessonId || 'none'}
+                  onValueChange={(value: string) =>
+                    setAssignmentForm((f) => ({ ...f, lessonId: value === 'none' ? '' : value }))
+                  }
                 >
-                  <option value="">-- Không gắn --</option>
-                  {lessons.map((l) => (
-                    <option key={l._id} value={l._id}>
-                      {l.title}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div className="flex gap-2 pt-2">
+                  <SelectTrigger className="w-full">
+                    <SelectValue placeholder="-- Không gắn --" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">-- Không gắn --</SelectItem>
+                    {lessons.map((l) => (
+                      <SelectItem key={l._id} value={l._id}>
+                        {l.title}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </section>
+              <div className="flex flex-wrap gap-3 pt-4 border-t border-border">
                 <button
                   type="submit"
                   disabled={savingAssignment}
-                  className="px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 disabled:opacity-50 flex items-center gap-2"
+                  className="px-6 py-3 bg-primary text-primary-foreground rounded-xl hover:bg-primary/90 disabled:opacity-50 flex items-center gap-2 font-medium"
                 >
                   {savingAssignment && <Loader2 className="w-4 h-4 animate-spin" />}
-                  {editingAssignmentId ? 'Lưu' : 'Thêm'}
+                  {editingAssignmentId ? 'Lưu thay đổi' : 'Thêm bài tập'}
                 </button>
                 <button
                   type="button"
                   onClick={() => setAssignmentModalOpen(false)}
-                  className="px-4 py-2 border border-border rounded-lg hover:bg-muted"
+                  className="px-6 py-3 border border-border rounded-xl hover:bg-muted font-medium"
                 >
                   Hủy
                 </button>
@@ -1159,14 +1503,14 @@ export function InstructorCourseEdit() {
       )}
 
       {submissionsModalAssignmentId && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4 sm:p-6">
           <motion.div
-            initial={{ opacity: 0, scale: 0.95 }}
+            initial={{ opacity: 0, scale: 0.97 }}
             animate={{ opacity: 1, scale: 1 }}
-            className="bg-card border border-border rounded-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto"
+            className="bg-card border border-border rounded-2xl max-w-3xl w-full max-h-[92vh] overflow-y-auto shadow-2xl"
           >
-            <div className="p-6 border-b border-border flex items-center justify-between">
-              <h3 className="text-lg font-semibold">Bài nộp của học viên</h3>
+            <div className="p-6 sm:p-8 border-b border-border flex items-center justify-between">
+              <h2 className="text-xl font-bold">Bài nộp của học viên</h2>
               <button
                 type="button"
                 onClick={() => {
@@ -1220,20 +1564,25 @@ export function InstructorCourseEdit() {
                               rows={2}
                               className="w-full px-2 py-1 border border-border rounded text-sm resize-none"
                             />
-                            <select
+                            <Select
                               value={gradeForm.status}
-                              onChange={(e) =>
+                              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                              onValueChange={(value: any) =>
                                 setGradeForm((f) => ({
                                   ...f,
-                                  status: e.target.value as 'submitted' | 'graded' | 'needs_revision',
+                                  status: value as 'submitted' | 'graded' | 'needs_revision',
                                 }))
                               }
-                              className="w-full max-w-xs px-2 py-1 border border-border rounded text-sm"
                             >
-                              <option value="submitted">Đã nộp</option>
-                              <option value="graded">Đã chấm</option>
-                              <option value="needs_revision">Cần sửa lại</option>
-                            </select>
+                              <SelectTrigger className="w-full max-w-xs text-sm">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="submitted">Đã nộp</SelectItem>
+                                <SelectItem value="graded">Đã chấm</SelectItem>
+                                <SelectItem value="needs_revision">Cần sửa lại</SelectItem>
+                              </SelectContent>
+                            </Select>
                             <div className="flex gap-2">
                               <button
                                 type="submit"

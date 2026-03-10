@@ -1,13 +1,22 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { motion } from 'motion/react';
 import { User, BookOpen, Award, Settings, Bell, Loader2, Eye, EyeOff } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAuth } from '@/app/context/AuthContext';
-import { userApi } from '@/app/lib/api';
+import { userApi, certificateApi, type Certificate } from '@/app/lib/api';
+import { useSearchParams, useNavigate } from 'react-router-dom';
 
 export function Account() {
-  const { user, updateUser, logout } = useAuth();
-  const [activeTab, setActiveTab] = useState('profile');
+const { user, updateUser, logout } = useAuth();
+const navigate = useNavigate();
+const [searchParams] = useSearchParams();
+
+const initialTabFromQuery = searchParams.get('tab') ?? 'profile';
+const [activeTab, setActiveTab] = useState(initialTabFromQuery);
+
+const [certLoading, setCertLoading] = useState(false);
+const [certificates, setCertificates] = useState<Certificate[]>([]);
+const [certLoaded, setCertLoaded] = useState(false);
 
   // Profile form state
   const [profileForm, setProfileForm] = useState({
@@ -26,6 +35,19 @@ export function Account() {
   const togglePw = (field: keyof typeof showPw) => setShowPw((p) => ({ ...p, [field]: !p[field] }));
 
 
+  // Đảm bảo tab đang active luôn là một trong các tab hợp lệ
+  useMemo(() => {
+    const validIds = tabs.map((t) => t.id);
+    if (!validIds.includes(activeTab)) {
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+      setActiveTab('profile');
+    }
+  }, [tabs, activeTab]);
+
+  // Derive avatar initials
+  const initials = user?.fullName
+    ? user.fullName.split(' ').map((w: string) => w[0]).join('').toUpperCase().slice(0, 2)
+    : 'JD';
  
   const tabs = [
     { id: 'profile', label: 'Hồ sơ', icon: User },
@@ -77,6 +99,36 @@ export function Account() {
   };
 
 
+              <nav className="space-y-2">
+                {tabs.map((tab) => (
+                  <button
+                    key={tab.id}
+                    onClick={() => {
+                      setActiveTab(tab.id);
+                      if (tab.id === 'certificates' && !certLoaded && !certLoading) {
+                        setCertLoading(true);
+                        certificateApi
+                          .myCertificates()
+                          .then((res) => {
+                            setCertificates(res.data?.certificates ?? []);
+                            setCertLoaded(true);
+                          })
+                          .catch((err: unknown) => {
+                            toast.error(err instanceof Error ? err.message : 'Không thể tải chứng chỉ.');
+                          })
+                          .finally(() => setCertLoading(false));
+                      }
+                    }}
+                    className={`w-full flex items-center space-x-3 px-4 py-3 rounded-lg transition-all ${activeTab === tab.id
+                      ? 'bg-primary text-primary-foreground'
+                      : 'text-muted-foreground hover:bg-muted'
+                      }`}
+                  >
+                    <tab.icon className="w-5 h-5" />
+                    <span>{tab.label}</span>
+                  </button>
+                ))}
+              </nav>
 
   return (
     <div className="min-h-screen py-12">
@@ -145,49 +197,110 @@ export function Account() {
             </div>
           </motion.div>
 
-          {/* Main Content */}
-          <motion.div
-            initial={{ opacity: 0, x: 20 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ delay: 0.4, duration: 0.6 }}
-            className="lg:col-span-3"
-          >
-            <div className="bg-card border border-border rounded-xl p-6">
-              {/* ── Profile Tab ── */}
-              {activeTab === 'profile' && (
-                <div className="space-y-8">
-                  {/* Personal info */}
-                  <form onSubmit={handleSaveProfile} className="space-y-4">
-                    <h2 className="text-2xl font-bold">Thông tin cá nhân</h2>
-                    <div>
-                      <label className="block text-sm font-medium mb-2">Họ và tên</label>
-                      <input
-                        type="text"
-                        value={profileForm.fullName}
-                        onChange={(e) => setProfileForm({ fullName: e.target.value })}
-                        className="w-full px-4 py-3 bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/50"
-                        required
-                        disabled={isSavingProfile}
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium mb-2">Email</label>
-                      <input
-                        type="email"
-                        value={user?.email ?? ''}
-                        readOnly
-                        className="w-full px-4 py-3 bg-muted/50 border border-border rounded-lg text-muted-foreground cursor-not-allowed"
-                      />
-                    </div>
-                    <button
-                      type="submit"
-                      disabled={isSavingProfile}
-                      className="flex items-center space-x-2 px-6 py-3 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
-                    >
-                      {isSavingProfile && <Loader2 className="w-4 h-4 animate-spin" />}
-                      <span>Lưu thay đổi</span>
-                    </button>
-                  </form>
+{/* Main Content */}
+<motion.div
+  initial={{ opacity: 0, x: 20 }}
+  animate={{ opacity: 1, x: 0 }}
+  transition={{ delay: 0.4, duration: 0.6 }}
+  className="lg:col-span-3"
+>
+  <div className="bg-card border border-border rounded-xl p-6">
+
+    {/* ── Profile Tab ── */}
+    {activeTab === 'profile' && (
+      <div className="space-y-8">
+        <form onSubmit={handleSaveProfile} className="space-y-4">
+          <h2 className="text-2xl font-bold">Thông tin cá nhân</h2>
+
+          <div>
+            <label className="block text-sm font-medium mb-2">Họ và tên</label>
+            <input
+              type="text"
+              value={profileForm.fullName}
+              onChange={(e) => setProfileForm({ fullName: e.target.value })}
+              className="w-full px-4 py-3 bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/50"
+              required
+              disabled={isSavingProfile}
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium mb-2">Email</label>
+            <input
+              type="email"
+              value={user?.email ?? ''}
+              readOnly
+              className="w-full px-4 py-3 bg-muted/50 border border-border rounded-lg text-muted-foreground cursor-not-allowed"
+            />
+          </div>
+
+          <button
+            type="submit"
+            disabled={isSavingProfile}
+            className="flex items-center space-x-2 px-6 py-3 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+          >
+            {isSavingProfile && <Loader2 className="w-4 h-4 animate-spin" />}
+            <span>Lưu thay đổi</span>
+          </button>
+        </form>
+      </div>
+    )}
+
+    {/* ── Certificates Tab ── */}
+    {activeTab === 'certificates' && (
+      <div>
+        <h2 className="text-2xl font-bold mb-6">Chứng chỉ</h2>
+
+        {certLoading ? (
+          <p className="text-sm text-muted-foreground">Đang tải chứng chỉ...</p>
+        ) : certificates.length === 0 ? (
+          <p className="text-sm text-muted-foreground">Bạn chưa có chứng chỉ nào.</p>
+        ) : (
+          <div className="grid md:grid-cols-2 gap-4">
+            {certificates.map((c) => (
+              <div
+                key={c._id}
+                className="p-6 border-2 border-primary/20 rounded-xl bg-gradient-to-br from-primary/5 to-accent/5"
+              >
+                <Award className="w-12 h-12 text-primary mb-4" />
+
+                <h3 className="font-semibold mb-1">
+                  {c.courseId?.title ?? 'Chứng chỉ'}
+                </h3>
+
+                <p className="text-xs text-muted-foreground mb-3">
+                  Mã: {c.certificateId}
+                </p>
+
+                <p className="text-sm text-muted-foreground mb-4">
+                  Ngày cấp: {c.issuedAt
+                    ? new Date(c.issuedAt).toLocaleDateString()
+                    : '—'}
+                </p>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    const courseId = c.courseId?._id;
+                    if (!courseId) {
+                      toast.error('Không tìm thấy khóa học của chứng chỉ này.');
+                      return;
+                    }
+                    navigate(`/courses/${courseId}/certificate`);
+                  }}
+                  className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-primary/10 text-primary hover:bg-primary/15 text-sm font-medium"
+                >
+                  Xem chi tiết chứng chỉ
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    )}
+
+  </div>
+</motion.div>
 
                   {/* Change password */}
                   <form onSubmit={handleChangePassword} className="space-y-4 pt-6 border-t border-border">

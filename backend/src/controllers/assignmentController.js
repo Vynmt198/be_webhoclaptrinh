@@ -66,13 +66,23 @@ exports.listByCourse = async (req, res, next) => {
 exports.create = async (req, res, next) => {
     try {
         const courseId = req.params.id;
-        const { title, description, lessonId, maxScore, dueDate } = req.body;
+        const {
+            title,
+            description,
+            lessonId,
+            maxScore,
+            dueDate,
+            type,
+            questions,
+            timeLimitMinutes,
+            passingScorePercent,
+        } = req.body;
 
         if (!title || !title.trim()) {
             return res.status(400).json({ success: false, message: 'Title is required.' });
         }
 
-        const assignment = await Assignment.create({
+        const payload = {
             courseId,
             lessonId: lessonId || null,
             title: title.trim(),
@@ -80,7 +90,29 @@ exports.create = async (req, res, next) => {
             maxScore: maxScore != null ? Number(maxScore) : 100,
             dueDate: dueDate || null,
             isActive: true,
-        });
+        };
+
+        if (type && ['regular', 'exam'].includes(type)) {
+            payload.type = type;
+        }
+        if (type === 'exam') {
+            if (Array.isArray(questions) && questions.length > 0) {
+                payload.questions = questions.map((q) => ({
+                    questionText: String(q.questionText || '').trim(),
+                    options: Array.isArray(q.options) ? q.options.map((o) => String(o)) : [],
+                    correctIndex: Number(q.correctIndex),
+                    points: q.points != null ? Number(q.points) : 1,
+                }));
+            }
+            if (timeLimitMinutes != null) {
+                payload.timeLimitMinutes = Number(timeLimitMinutes);
+            }
+            if (passingScorePercent != null) {
+                payload.passingScorePercent = Number(passingScorePercent);
+            }
+        }
+
+        const assignment = await Assignment.create(payload);
 
         await assignment.populate('lessonId', 'title order');
 
@@ -156,7 +188,18 @@ exports.getOne = async (req, res, next) => {
 exports.update = async (req, res, next) => {
     try {
         const assignment = req.assignment;
-        const { title, description, lessonId, maxScore, dueDate, isActive } = req.body;
+        const {
+            title,
+            description,
+            lessonId,
+            maxScore,
+            dueDate,
+            isActive,
+            type,
+            questions,
+            timeLimitMinutes,
+            passingScorePercent,
+        } = req.body;
 
         if (title !== undefined) assignment.title = title.trim();
         if (description !== undefined) assignment.description = description.trim();
@@ -164,6 +207,28 @@ exports.update = async (req, res, next) => {
         if (maxScore !== undefined) assignment.maxScore = Number(maxScore);
         if (dueDate !== undefined) assignment.dueDate = dueDate || null;
         if (isActive !== undefined) assignment.isActive = Boolean(isActive);
+
+        if (type !== undefined && ['regular', 'exam'].includes(type)) {
+            assignment.type = type;
+        }
+        if (assignment.type === 'exam') {
+            if (Array.isArray(questions)) {
+                assignment.questions = questions.map((q) => ({
+                    questionText: String(q.questionText || '').trim(),
+                    options: Array.isArray(q.options) ? q.options.map((o) => String(o)) : [],
+                    correctIndex: Number(q.correctIndex),
+                    points: q.points != null ? Number(q.points) : 1,
+                }));
+            }
+            if (timeLimitMinutes !== undefined) {
+                assignment.timeLimitMinutes =
+                    timeLimitMinutes != null ? Number(timeLimitMinutes) : null;
+            }
+            if (passingScorePercent !== undefined) {
+                assignment.passingScorePercent =
+                    passingScorePercent != null ? Number(passingScorePercent) : 60;
+            }
+        }
 
         await assignment.save();
         await assignment.populate('lessonId', 'title order');
@@ -244,6 +309,90 @@ exports.submit = async (req, res, next) => {
             success: true,
             message: 'Assignment submitted successfully. You can resubmit to update your work.',
             data: { submission },
+        });
+    } catch (error) {
+        next(error);
+    }
+};
+
+/**
+ * POST /api/assignments/:id/submit-exam
+ * Submit multiple-choice exam (auto-grade). Only for assignment.type === 'exam'.
+ */
+exports.submitExam = async (req, res, next) => {
+    try {
+        const assignment = req.assignment;
+        const userId = req.user._id;
+
+        if (assignment.type !== 'exam' || !Array.isArray(assignment.questions) || assignment.questions.length === 0) {
+            return res.status(400).json({
+                success: false,
+                message: 'Assignment is not a valid exam.',
+            });
+        }
+
+        const enrollment = await Enrollment.findOne({
+            userId,
+            courseId: assignment.courseId,
+            status: 'active',
+        });
+        if (!enrollment) {
+            return res.status(403).json({
+                success: false,
+                message: 'You must be enrolled in this course to submit assignments.',
+            });
+        }
+
+        const canSubmit = await hasPassedAllQuizzesInCourse(assignment.courseId, userId);
+        if (!canSubmit) {
+            return res.status(403).json({
+                success: false,
+                message:
+                    'Bạn cần pass hết quiz trong khóa trước khi làm bài thi cuối khóa.',
+            });
+        }
+
+        const answers = Array.isArray(req.body.answers) ? req.body.answers : [];
+        let totalPoints = 0;
+        let earnedPoints = 0;
+
+        assignment.questions.forEach((q, idx) => {
+            const pts = q.points != null ? q.points : 1;
+            totalPoints += pts;
+            if (Number(answers[idx]) === q.correctIndex) {
+                earnedPoints += pts;
+            }
+        });
+
+        const scorePercent = totalPoints > 0 ? Math.round((earnedPoints / totalPoints) * 100) : 0;
+        const passPercent = assignment.passingScorePercent || 60;
+        const isPassed = scorePercent >= passPercent;
+
+        const submissionUpdate = {
+            content: '',
+            attachments: [],
+            score: scorePercent,
+            status: 'graded',
+            gradedAt: new Date(),
+            gradedBy: null,
+        };
+
+        const submission = await AssignmentSubmission.findOneAndUpdate(
+            { assignmentId: assignment._id, userId },
+            { $set: submissionUpdate },
+            { new: true, upsert: true, runValidators: true }
+        );
+
+        return res.status(200).json({
+            success: true,
+            message: isPassed
+                ? 'Bạn đã hoàn thành bài thi cuối khóa.'
+                : 'Bài thi chưa đạt điểm yêu cầu.',
+            data: {
+                submission,
+                score: scorePercent,
+                isPassed,
+            },
         });
     } catch (error) {
         next(error);

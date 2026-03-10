@@ -1,5 +1,7 @@
 const Course = require('../models/Course');
 const Lesson = require('../models/Lesson');
+const Enrollment = require('../models/Enrollment');
+const Certificate = require('../models/Certificate');
 const mongoose = require('mongoose');
 
 const listCourses = async (req, res, next) => {
@@ -99,7 +101,44 @@ const getCourseById = async (req, res, next) => {
         if (course.status !== 'active' && !isOwnerOrAdmin) {
             return res.status(404).json({ success: false, message: 'Course not found.' });
         }
-        return res.status(200).json({ success: true, data: course });
+        let isEnrolled = false;
+        let enrollmentStatus = null;
+        let hasCertificate = false;
+
+        if (req.user) {
+            const [enrollment, certificate] = await Promise.all([
+                Enrollment.findOne({
+                    userId: req.user._id,
+                    courseId: course._id,
+                    status: { $in: ['active', 'completed'] },
+                }).lean(),
+                Certificate.findOne({
+                    userId: req.user._id,
+                    courseId: course._id,
+                }).lean(),
+            ]);
+
+            if (enrollment) {
+                isEnrolled = true;
+                enrollmentStatus = enrollment.status;
+            }
+            if (certificate) {
+                hasCertificate = true;
+                // Nếu đã có chứng chỉ mà enrollment chưa ở trạng thái completed thì coi như completed
+                if (!enrollmentStatus) {
+                    enrollmentStatus = 'completed';
+                }
+            }
+        }
+
+        const payload = {
+            ...course.toObject(),
+            isEnrolled,
+            enrollmentStatus,
+            hasCertificate,
+        };
+
+        return res.status(200).json({ success: true, data: payload });
     } catch (error) {
         next(error);
     }

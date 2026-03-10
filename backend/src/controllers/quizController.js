@@ -1,20 +1,45 @@
 const Quiz = require('../models/Quiz');
 const QuizAttempt = require('../models/QuizAttempt');
 const Progress = require('../models/Progress');
+const Lesson = require('../models/Lesson');
 
-/** Kiểm tra học viên đã hoàn thành bài học (lesson) chứa quiz chưa. Chỉ khi hoàn thành mới được làm quiz. */
-const canAttemptQuiz = async (userId, lessonId) => {
-    const progress = await Progress.findOne({
+/**
+ * Check if learner can attempt quiz for a quiz-lesson.
+ * Rule: learner must be enrolled (handled by middleware) AND must have completed all previous lessons in the course
+ * (by order) before attempting this quiz. The quiz lesson itself will be marked completed when the learner PASSES.
+ */
+const canAttemptQuiz = async (userId, quizLessonId) => {
+    const quizLesson = await Lesson.findById(quizLessonId).select('courseId order type');
+    if (!quizLesson) return { ok: false, message: 'Lesson not found.' };
+    if (quizLesson.type !== 'quiz') return { ok: false, message: 'Lesson is not a quiz lesson.' };
+
+    const prevLessons = await Lesson.find({
+        courseId: quizLesson.courseId,
+        order: { $lt: quizLesson.order },
+    }).select('_id');
+
+    if (prevLessons.length === 0) return { ok: true };
+
+    const prevIds = prevLessons.map((l) => l._id);
+    const completedPrev = await Progress.countDocuments({
         userId,
-        lessonId,
+        lessonId: { $in: prevIds },
         isCompleted: true,
     });
-    return !!progress;
+
+    if (completedPrev !== prevIds.length) {
+        return {
+            ok: false,
+            message: 'Bạn cần hoàn thành các bài học trước đó trước khi làm quiz này.',
+        };
+    }
+
+    return { ok: true };
 };
 
 /**
  * @route GET /api/quizzes/:id
- * @desc Get quiz questions (chỉ khi đã hoàn thành bài học chứa quiz)
+ * @desc Get quiz questions (must complete previous lessons before attempting)
  */
 exports.getQuiz = async (req, res, next) => {
     try {
@@ -27,10 +52,10 @@ exports.getQuiz = async (req, res, next) => {
         }
 
         const allowed = await canAttemptQuiz(userId, quiz.lessonId);
-        if (!allowed) {
+        if (!allowed.ok) {
             return res.status(403).json({
                 success: false,
-                message: 'Bạn cần hoàn thành bài học trước khi làm quiz.',
+                message: allowed.message || 'Bạn chưa đủ điều kiện để làm quiz này.',
             });
         }
 
@@ -45,7 +70,7 @@ exports.getQuiz = async (req, res, next) => {
 
 /**
  * @route POST /api/quizzes/:id/attempt
- * @desc Submit quiz attempt (chỉ khi đã hoàn thành bài học; có thể làm lại nhiều lần)
+ * @desc Submit quiz attempt (must complete previous lessons; can retry)
  */
 exports.submitAttempt = async (req, res, next) => {
     try {
@@ -59,11 +84,16 @@ exports.submitAttempt = async (req, res, next) => {
         }
 
         const allowed = await canAttemptQuiz(userId, quiz.lessonId);
-        if (!allowed) {
+        if (!allowed.ok) {
             return res.status(403).json({
                 success: false,
-                message: 'Bạn cần hoàn thành bài học trước khi làm quiz.',
+                message: allowed.message || 'Bạn chưa đủ điều kiện để làm quiz này.',
             });
+        }
+
+        const quizLesson = await Lesson.findById(quiz.lessonId).select('courseId');
+        if (!quizLesson) {
+            return res.status(404).json({ success: false, message: 'Lesson not found' });
         }
 
         let totalScore = 0;
@@ -95,6 +125,19 @@ exports.submitAttempt = async (req, res, next) => {
             submittedAt: new Date(),
             timeSpent: timeSpent || 0
         });
+
+        // If passed: mark the quiz lesson as completed (this becomes the ONLY way to complete a quiz lesson)
+        if (isPassed) {
+            await Progress.findOneAndUpdate(
+                { userId, lessonId: quiz.lessonId },
+                {
+                    courseId: quizLesson.courseId,
+                    isCompleted: true,
+                    completedAt: new Date(),
+                },
+                { new: true, upsert: true }
+            );
+        }
 
         res.status(200).json({
             success: true,
