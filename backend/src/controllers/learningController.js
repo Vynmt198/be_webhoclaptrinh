@@ -1,10 +1,11 @@
 const Course = require('../models/Course');
 const Lesson = require('../models/Lesson');
 const Progress = require('../models/Progress');
+const Quiz = require('../models/Quiz');
 
 /**
  * @route GET /api/courses/:id/learn
- * @desc Get course learning data including lessons and progress
+ * @desc Get course learning data including lessons, progress, and quizId for quiz lessons
  */
 exports.getCourseLearningData = async (req, res, next) => {
     try {
@@ -20,7 +21,22 @@ exports.getCourseLearningData = async (req, res, next) => {
         }
 
         // Get all lessons for the course, sorted by order
-        const lessons = await Lesson.find({ courseId }).sort({ order: 1 }).select('-content -videoUrl'); // Exclude content from overview
+        const lessons = await Lesson.find({ courseId }).sort({ order: 1 }).select('-content -videoUrl');
+        const quizLessons = lessons.filter((l) => l.type === 'quiz');
+        const quizByLesson = {};
+        if (quizLessons.length > 0) {
+            const quizzes = await Quiz.find({ lessonId: { $in: quizLessons.map((l) => l._id) } }).select('_id lessonId');
+            quizzes.forEach((q) => {
+                quizByLesson[q.lessonId.toString()] = q._id;
+            });
+        }
+        const lessonsWithQuizId = lessons.map((l) => {
+            const plain = l.toObject ? l.toObject() : { ...l };
+            if (l.type === 'quiz' && quizByLesson[l._id.toString()]) {
+                plain.quizId = quizByLesson[l._id.toString()];
+            }
+            return plain;
+        });
 
         // Get user progress for these lessons
         const progress = await Progress.find({ courseId, userId: req.user._id });
@@ -37,7 +53,7 @@ exports.getCourseLearningData = async (req, res, next) => {
                     _id: course._id,
                     title: course.title,
                 },
-                lessons,
+                lessons: lessonsWithQuizId,
                 progress,
                 completionPercentage
             }

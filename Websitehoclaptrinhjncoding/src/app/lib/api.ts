@@ -181,6 +181,8 @@ export interface Lesson {
     content?: string;
     videoUrl?: string;
     courseId?: string;
+    /** Có khi lesson.type === 'quiz', dùng để gọi API làm quiz */
+    quizId?: string;
 }
 
 export interface Review {
@@ -324,6 +326,14 @@ export const learningApi = {
         request<{ success: boolean; data: CourseLearningResponse }>(`/courses/${courseId}/learn`),
 };
 
+export const progressApi = {
+    markComplete: (lessonId: string) =>
+        request<{ success: boolean; data: LessonProgress }>('/progress/mark-complete', {
+            method: 'POST',
+            body: { lessonId },
+        }),
+};
+
 export interface Category {
     _id: string;
     name: string;
@@ -371,6 +381,17 @@ export interface Quiz {
     passingScore: number;
     timeLimit?: number;
 }
+
+/** Quiz cho học viên: xem đề + nộp bài (có thể làm lại nhiều lần) */
+export const quizApi = {
+    getQuiz: (quizId: string) =>
+        request<{ success: boolean; data: Quiz }>(`/quizzes/${quizId}`),
+    submitAttempt: (quizId: string, payload: { answers: unknown[]; timeSpent?: number }) =>
+        request<{ success: boolean; data: { attemptId: string; score: number; isPassed: boolean; timeSpent?: number } }>(
+            `/quizzes/${quizId}/attempt`,
+            { method: 'POST', body: payload as Record<string, unknown> }
+        ),
+};
 
 export const instructorQuizApi = {
     getByLessonId: (lessonId: string) =>
@@ -455,5 +476,80 @@ export const paymentApi = {
     },
     verifyReturn: (queryStr: string) =>
         request<{ success: boolean; message: string; data: any }>(`/payments/vnpay-return${queryStr}`),
+};
+
+// ─── Assignments (instructor: create/grade; learner: submit) ─────────────────
+
+export interface Assignment {
+    _id: string;
+    courseId: string;
+    lessonId?: { _id: string; title?: string; order?: number } | null;
+    title: string;
+    description?: string;
+    maxScore: number;
+    dueDate?: string | null;
+    isActive: boolean;
+    createdAt?: string;
+    updatedAt?: string;
+}
+
+export interface AssignmentSubmission {
+    _id: string;
+    assignmentId: string | { _id: string; title?: string; maxScore?: number };
+    userId: string | { _id: string; fullName?: string; email?: string };
+    content?: string;
+    attachments?: string[];
+    score?: number | null;
+    feedback?: string | null;
+    status: 'submitted' | 'graded' | 'needs_revision';
+    gradedAt?: string | null;
+    gradedBy?: string | null;
+    createdAt?: string;
+    updatedAt?: string;
+}
+
+export const assignmentApi = {
+    listByCourse: (courseId: string) =>
+        request<{ success: boolean; data: { assignments: Assignment[]; canSubmit: boolean } }>(
+            `/courses/${courseId}/assignments`
+        ),
+    create: (courseId: string, payload: { title: string; description?: string; lessonId?: string | null; maxScore?: number; dueDate?: string | null }) =>
+        request<{ success: boolean; data: { assignment: Assignment } }>(`/courses/${courseId}/assignments`, {
+            method: 'POST',
+            body: payload as Record<string, unknown>,
+        }),
+    getOne: (assignmentId: string) =>
+        request<{ success: boolean; data: { assignment: Assignment; canSubmit: boolean; mySubmission?: AssignmentSubmission } }>(
+            `/assignments/${assignmentId}`
+        ),
+    update: (assignmentId: string, payload: Partial<{ title: string; description: string; lessonId: string | null; maxScore: number; dueDate: string | null; isActive: boolean }>) =>
+        request<{ success: boolean; data: { assignment: Assignment } }>(`/assignments/${assignmentId}`, {
+            method: 'PUT',
+            body: payload as Record<string, unknown>,
+        }),
+    delete: (assignmentId: string) =>
+        request<{ success: boolean }>(`/assignments/${assignmentId}`, { method: 'DELETE' }),
+    getSubmissions: (assignmentId: string) =>
+        request<{ success: boolean; data: { submissions: AssignmentSubmission[]; total: number } }>(
+            `/assignments/${assignmentId}/submissions`
+        ),
+    gradeSubmission: (submissionId: string, payload: { score?: number; feedback?: string; status: 'submitted' | 'graded' | 'needs_revision' }) =>
+        request<{ success: boolean; data: { submission: AssignmentSubmission } }>(
+            `/assignments/submissions/${submissionId}/grade`,
+            { method: 'PUT', body: payload as Record<string, unknown> }
+        ),
+    /** Learner: nộp bài (content + attachments) */
+    submit: (assignmentId: string, payload: { content?: string; attachments?: string[] }) =>
+        request<{ success: boolean; data: { submission: AssignmentSubmission } }>(
+            `/assignments/${assignmentId}/submit`,
+            { method: 'POST', body: payload as Record<string, unknown> }
+        ),
+};
+
+export const assignmentLearnerApi = {
+    getMySubmissionsByCourse: (courseId: string) =>
+        request<{ success: boolean; data: { submissions: AssignmentSubmission[]; total: number } }>(
+            `/courses/${courseId}/my-assignment-submissions`
+        ),
 };
 
