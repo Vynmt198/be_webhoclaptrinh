@@ -181,6 +181,8 @@ export interface Lesson {
     content?: string;
     videoUrl?: string;
     courseId?: string;
+    /** Có khi lesson.type === 'quiz', dùng để gọi API làm quiz */
+    quizId?: string;
 }
 
 export interface Review {
@@ -324,6 +326,14 @@ export const learningApi = {
         request<{ success: boolean; data: CourseLearningResponse }>(`/courses/${courseId}/learn`),
 };
 
+export const progressApi = {
+    markComplete: (lessonId: string) =>
+        request<{ success: boolean; data: LessonProgress }>('/progress/mark-complete', {
+            method: 'POST',
+            body: { lessonId },
+        }),
+};
+
 export interface Category {
     _id: string;
     name: string;
@@ -371,6 +381,17 @@ export interface Quiz {
     passingScore: number;
     timeLimit?: number;
 }
+
+/** Quiz cho học viên: xem đề + nộp bài (có thể làm lại nhiều lần) */
+export const quizApi = {
+    getQuiz: (quizId: string) =>
+        request<{ success: boolean; data: Quiz }>(`/quizzes/${quizId}`),
+    submitAttempt: (quizId: string, payload: { answers: unknown[]; timeSpent?: number }) =>
+        request<{ success: boolean; data: { attemptId: string; score: number; isPassed: boolean; timeSpent?: number } }>(
+            `/quizzes/${quizId}/attempt`,
+            { method: 'POST', body: payload as Record<string, unknown> }
+        ),
+};
 
 export const instructorQuizApi = {
     getByLessonId: (lessonId: string) =>
@@ -517,6 +538,7 @@ export const assignmentApi = {
             `/assignments/submissions/${submissionId}/grade`,
             { method: 'PUT', body: payload as Record<string, unknown> }
         ),
+    /** Learner: nộp bài (content + attachments) */
     submit: (assignmentId: string, payload: { content?: string; attachments?: string[] }) =>
         request<{ success: boolean; data: { submission: AssignmentSubmission } }>(
             `/assignments/${assignmentId}/submit`,

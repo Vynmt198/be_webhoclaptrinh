@@ -231,6 +231,97 @@ const isQuizOwner = (quizIdParam = 'quizId') => {
     };
 };
 
+/**
+ * Load assignment by param and attach to req.assignment (no permission check).
+ */
+const loadAssignment = (idParam = 'id') => {
+    return async (req, res, next) => {
+        try {
+            const Assignment = require('../models/Assignment');
+            const assignment = await Assignment.findById(req.params[idParam]);
+            if (!assignment) {
+                return res.status(404).json({ success: false, message: 'Assignment not found.' });
+            }
+            req.assignment = assignment;
+            next();
+        } catch (error) {
+            next(error);
+        }
+    };
+};
+
+/**
+ * Load assignment and require current user to be course owner (instructor or admin).
+ */
+const isAssignmentCourseOwner = (idParam = 'id') => {
+    return async (req, res, next) => {
+        try {
+            const Assignment = require('../models/Assignment');
+            const Course = require('../models/Course');
+            const assignment = await Assignment.findById(req.params[idParam]);
+            if (!assignment) {
+                return res.status(404).json({ success: false, message: 'Assignment not found.' });
+            }
+            const course = await Course.findById(assignment.courseId);
+            if (!course) {
+                return res.status(404).json({ success: false, message: 'Course not found.' });
+            }
+            const isOwner = course.instructorId.toString() === req.user._id.toString();
+            const isAdmin = req.user.role === 'admin';
+            if (!isOwner && !isAdmin) {
+                return res.status(403).json({
+                    success: false,
+                    message: 'Access denied. You can only manage assignments in your own courses.',
+                });
+            }
+            req.assignment = assignment;
+            req.course = course;
+            next();
+        } catch (error) {
+            next(error);
+        }
+    };
+};
+
+/**
+ * Load assignment submission and require current user to be course owner (for grading).
+ */
+const isSubmissionGrader = (idParam = 'id') => {
+    return async (req, res, next) => {
+        try {
+            const AssignmentSubmission = require('../models/AssignmentSubmission');
+            const Assignment = require('../models/Assignment');
+            const Course = require('../models/Course');
+            const submission = await AssignmentSubmission.findById(req.params[idParam]);
+            if (!submission) {
+                return res.status(404).json({ success: false, message: 'Submission not found.' });
+            }
+            const assignment = await Assignment.findById(submission.assignmentId);
+            if (!assignment) {
+                return res.status(404).json({ success: false, message: 'Assignment not found.' });
+            }
+            const course = await Course.findById(assignment.courseId);
+            if (!course) {
+                return res.status(404).json({ success: false, message: 'Course not found.' });
+            }
+            const isOwner = course.instructorId.toString() === req.user._id.toString();
+            const isAdmin = req.user.role === 'admin';
+            if (!isOwner && !isAdmin) {
+                return res.status(403).json({
+                    success: false,
+                    message: 'Access denied. You can only grade submissions in your own courses.',
+                });
+            }
+            req.submission = submission;
+            req.assignment = assignment;
+            req.course = course;
+            next();
+        } catch (error) {
+            next(error);
+        }
+    };
+};
+
 const isReviewOwnerOrAdmin = async (req, res, next) => {
     try {
         const Review = require('../models/Review');
@@ -269,6 +360,9 @@ module.exports = {
     isLessonOwner,
     isLessonOwnerParam,
     isQuizOwner,
+    loadAssignment,
+    isAssignmentCourseOwner,
+    isSubmissionGrader,
     isReviewOwner,
     isReviewOwnerOrAdmin,
 };

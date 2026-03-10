@@ -5,7 +5,7 @@ const auth = require('../middleware/auth');
 const isEnrolled = require('../middleware/isEnrolled');
 
 router.get('/:id', auth, isEnrolled, quizController.getQuiz);
-router.post('/:id/attempt', auth, quizController.submitAttempt);
+router.post('/:id/attempt', auth, isEnrolled, quizController.submitAttempt);
 router.get('/:id/results', auth, quizController.getQuizResults);
 
 module.exports = router;
