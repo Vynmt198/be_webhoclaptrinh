@@ -1,11 +1,16 @@
 const express = require('express');
 const router = express.Router();
 
-const { getProfile, updateProfile, changePassword } = require('../controllers/userController');
+const { getProfile, getPublicProfile, updateProfile, changePassword } = require('../controllers/userController');
 const { validateUpdateProfile, validateChangePassword } = require('../utils/validators');
 const auth = require('../middleware/auth');
 
-// All user routes require authentication
+// @route   GET /api/users/:id/public-profile
+// @desc    Get public profile of a user (e.g. instructor) – no auth required
+// @access  Public
+router.get('/:id/public-profile', getPublicProfile);
+
+// All other user routes require authentication
 router.use(auth);
 
 // @route   GET /api/users/profile

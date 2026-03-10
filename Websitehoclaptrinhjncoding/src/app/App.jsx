@@ -33,6 +33,7 @@ import { InstructorCourseCreate } from '@/app/pages/instructor/InstructorCourseC
 import { InstructorCourseEdit } from '@/app/pages/instructor/InstructorCourseEdit';
 import { InstructorAnalytics } from '@/app/pages/instructor/InstructorAnalytics';
 import { InstructorAnalyticsList } from '@/app/pages/instructor/InstructorAnalyticsList';
+import { InstructorProfileView } from '@/app/pages/InstructorProfileView';
 
 export default function App() {
   return (
@@ -54,6 +55,7 @@ export default function App() {
               <Route path="faq" element={<FAQ />} />
               <Route path="terms" element={<Terms />} />
               <Route path="contact" element={<Contact />} />
+              <Route path="profile/instructor/:userId" element={<InstructorProfileView />} />
 
               {/* Admin Routes (Wrapped in Layout + AdminLayout) */}
               <Route path="admin" element={<AdminLayout />}>

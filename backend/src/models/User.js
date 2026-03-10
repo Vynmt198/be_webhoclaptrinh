@@ -53,6 +53,37 @@ const userSchema = new mongoose.Schema(
             default: null,
             maxlength: [500, 'Bio cannot exceed 500 characters'],
         },
+        // Instructor extended profile (optional)
+        instructorHeadline: {
+            type: String,
+            default: null,
+            maxlength: [150, 'Headline cannot exceed 150 characters'],
+        },
+        instructorBio: {
+            type: String,
+            default: null,
+            maxlength: [2000, 'Instructor bio cannot exceed 2000 characters'],
+        },
+        instructorSkills: {
+            type: [String],
+            default: [],
+        },
+        instructorWebsite: {
+            type: String,
+            default: null,
+        },
+        instructorFacebook: {
+            type: String,
+            default: null,
+        },
+        instructorYoutube: {
+            type: String,
+            default: null,
+        },
+        instructorLinkedin: {
+            type: String,
+            default: null,
+        },
         lastLogin: {
             type: Date,
             default: null,
