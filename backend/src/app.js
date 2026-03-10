@@ -22,6 +22,7 @@ const progressRoutes = require('./routes/progress');
 const quizzesRoutes = require('./routes/quizzes');
 const instructorRoutes = require('./routes/instructor');
 const certificateRoutes = require('./routes/certificates');
+const enrollmentRoutes = require('./routes/enrollments');
 const discussionRoutes = require('./routes/discussions');
 const uploadRoutes = require('./routes/upload');
 const path = require('path');
@@ -66,6 +67,7 @@ app.use('/api/progress', progressRoutes);
 app.use('/api/quizzes', quizzesRoutes);
 app.use('/api/instructor', instructorRoutes);
 app.use('/api/certificates', certificateRoutes);
+app.use('/api/enrollments', enrollmentRoutes);
 app.use('/api/discussions', discussionRoutes);
 app.use('/api/upload', uploadRoutes);
 
