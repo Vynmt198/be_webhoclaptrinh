@@ -4,7 +4,12 @@ const Progress = require('../models/Progress');
 const Lesson = require('../models/Lesson');
 const QuizAttempt = require('../models/QuizAttempt');
 const Quiz = require('../models/Quiz');
+const Assignment = require('../models/Assignment');
+const AssignmentSubmission = require('../models/AssignmentSubmission');
 const { randomUUID } = require('crypto');
+
+// Assignment is passed when score >= maxScore * ASSIGNMENT_PASS_PERCENT
+const ASSIGNMENT_PASS_PERCENT = 0.6;
 
 /**
  * POST /api/certificates/generate
@@ -82,6 +87,34 @@ exports.generateCertificate = async (req, res, next) => {
                     success: false,
                     message: 'You must pass all quizzes in the course to receive a certificate.',
                 });
+            }
+        }
+
+        // Check all assignments passed (business rule: Pass Quiz → Assignment → Certificate)
+        const assignments = await Assignment.find({ courseId, isActive: true });
+        if (assignments.length > 0) {
+            for (const assignment of assignments) {
+                const submission = await AssignmentSubmission.findOne({
+                    assignmentId: assignment._id,
+                    userId,
+                });
+
+                const maxScore = assignment.maxScore || 100;
+                const passScore = maxScore * ASSIGNMENT_PASS_PERCENT;
+
+                const passed =
+                    submission &&
+                    submission.status === 'graded' &&
+                    submission.score != null &&
+                    submission.score >= passScore;
+
+                if (!passed) {
+                    return res.status(400).json({
+                        success: false,
+                        message:
+                            'You must pass all assignments in the course to receive a certificate. Complete and pass every assignment first.',
+                    });
+                }
             }
         }
 

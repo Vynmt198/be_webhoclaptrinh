@@ -1,18 +1,37 @@
 const Quiz = require('../models/Quiz');
 const QuizAttempt = require('../models/QuizAttempt');
+const Progress = require('../models/Progress');
+
+/** Kiểm tra học viên đã hoàn thành bài học (lesson) chứa quiz chưa. Chỉ khi hoàn thành mới được làm quiz. */
+const canAttemptQuiz = async (userId, lessonId) => {
+    const progress = await Progress.findOne({
+        userId,
+        lessonId,
+        isCompleted: true,
+    });
+    return !!progress;
+};
 
 /**
  * @route GET /api/quizzes/:id
- * @desc Get quiz questions
+ * @desc Get quiz questions (chỉ khi đã hoàn thành bài học chứa quiz)
  */
 exports.getQuiz = async (req, res, next) => {
     try {
         const quizId = req.params.id;
+        const userId = req.user._id;
 
-        // Exclude correctAnswer and explanation from the payload sent to learner
         const quiz = await Quiz.findById(quizId).select('-questions.correctAnswer -questions.explanation');
         if (!quiz) {
             return res.status(404).json({ success: false, message: 'Quiz not found' });
+        }
+
+        const allowed = await canAttemptQuiz(userId, quiz.lessonId);
+        if (!allowed) {
+            return res.status(403).json({
+                success: false,
+                message: 'Bạn cần hoàn thành bài học trước khi làm quiz.',
+            });
         }
 
         res.status(200).json({
@@ -26,16 +45,25 @@ exports.getQuiz = async (req, res, next) => {
 
 /**
  * @route POST /api/quizzes/:id/attempt
- * @desc Submit quiz attempt
+ * @desc Submit quiz attempt (chỉ khi đã hoàn thành bài học; có thể làm lại nhiều lần)
  */
 exports.submitAttempt = async (req, res, next) => {
     try {
         const quizId = req.params.id;
+        const userId = req.user._id;
         const { answers, timeSpent } = req.body; // answers is an array corresponding to questions
 
         const quiz = await Quiz.findById(quizId);
         if (!quiz) {
             return res.status(404).json({ success: false, message: 'Quiz not found' });
+        }
+
+        const allowed = await canAttemptQuiz(userId, quiz.lessonId);
+        if (!allowed) {
+            return res.status(403).json({
+                success: false,
+                message: 'Bạn cần hoàn thành bài học trước khi làm quiz.',
+            });
         }
 
         let totalScore = 0;
