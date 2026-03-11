@@ -1,60 +1,85 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { motion } from 'motion/react';
-import { User, BookOpen, Settings, Bell, Loader2, Eye, EyeOff, CreditCard } from 'lucide-react';
+import { User, BookOpen, Award, Settings, Bell, Loader2, Eye, EyeOff } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAuth } from '@/app/context/AuthContext';
-import { userApi, paymentApi, type PaymentInfo, enrollmentApi, type EnrollmentWithCourse } from '@/app/lib/api';
+import { userApi, certificateApi, type Certificate } from '@/app/lib/api';
 import { useSearchParams, useNavigate } from 'react-router-dom';
-import { useEffect } from 'react';
 
 export function Account() {
-const { user, updateUser, logout } = useAuth();
-const navigate = useNavigate();
-const [searchParams] = useSearchParams();
+  const { user, updateUser, logout } = useAuth();
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
 
-const initialTabFromQuery = searchParams.get('tab') ?? 'profile';
-const [activeTab, setActiveTab] = useState(initialTabFromQuery);
+  const initialTabFromQuery = searchParams.get('tab') ?? 'profile';
+  const [activeTab, setActiveTab] = useState(initialTabFromQuery);
 
+  const [certLoading, setCertLoading] = useState(false);
+  const [certificates, setCertificates] = useState<Certificate[]>([]);
+  const [certLoaded, setCertLoaded] = useState(false);
 
-  // Profile form state
-  const [profileForm, setProfileForm] = useState({
-    fullName: user?.fullName ?? '',
-  });
-  const [isSavingProfile, setIsSavingProfile] = useState(false);
+  // Profile form state
+  const [profileForm, setProfileForm] = useState({
+    fullName: user?.fullName ?? '',
+    // Instructor-only fields
+    instructorHeadline: user?.instructorHeadline ?? '',
+    instructorBio: user?.instructorBio ?? '',
+    instructorSkillsText: (user?.instructorSkills ?? []).join(', '),
+    instructorWebsite: user?.instructorWebsite ?? '',
+    instructorFacebook: user?.instructorFacebook ?? '',
+    instructorYoutube: user?.instructorYoutube ?? '',
+    instructorLinkedin: user?.instructorLinkedin ?? '',
+  });
+  const [isSavingProfile, setIsSavingProfile] = useState(false);
 
-  // Password form state
-  const [passwordForm, setPasswordForm] = useState({
-    currentPassword: '',
-    newPassword: '',
-    confirmPassword: '',
-  });
-  const [isSavingPassword, setIsSavingPassword] = useState(false);
-  const [showPw, setShowPw] = useState({ current: false, newPw: false, confirm: false });
+  // Đồng bộ form với user (khi vào trang hoặc sau khi lưu) để luôn hiển thị giá trị đã lưu
+  useEffect(() => {
+    if (!user) return;
+    setProfileForm((prev) => ({
+      ...prev,
+      fullName: user.fullName ?? '',
+      instructorHeadline: user.instructorHeadline ?? '',
+      instructorBio: user.instructorBio ?? '',
+      instructorSkillsText: (user.instructorSkills ?? []).join(', '),
+      instructorWebsite: user.instructorWebsite ?? '',
+      instructorFacebook: user.instructorFacebook ?? '',
+      instructorYoutube: user.instructorYoutube ?? '',
+      instructorLinkedin: user.instructorLinkedin ?? '',
+    }));
+  }, [user?._id, user?.fullName, user?.instructorHeadline, user?.instructorBio, user?.instructorSkills, user?.instructorWebsite, user?.instructorFacebook, user?.instructorYoutube, user?.instructorLinkedin]);
+
+  // Password form state
+  const [passwordForm, setPasswordForm] = useState({
+    currentPassword: '',
+    newPassword: '',
+    confirmPassword: '',
+  });
+  const [isSavingPassword, setIsSavingPassword] = useState(false);
+  const [showPw, setShowPw] = useState({ current: false, newPw: false, confirm: false });
   const togglePw = (field: keyof typeof showPw) => setShowPw((p) => ({ ...p, [field]: !p[field] }));
-
-  // Payment History state
-  const [paymentsLoading, setPaymentsLoading] = useState(false);
-  const [payments, setPayments] = useState<PaymentInfo[]>([]);
-  const [paymentsLoaded, setPaymentsLoaded] = useState(false);
-
-  // Enrolled Courses state
-  const [coursesLoading, setCoursesLoading] = useState(false);
-  const [enrolledCourses, setEnrolledCourses] = useState<EnrollmentWithCourse[]>([]);
-  const [coursesLoaded, setCoursesLoaded] = useState(false);
 
   // Derive avatar initials
   const initials = user?.fullName
     ? user.fullName.split(' ').map((w: string) => w[0]).join('').toUpperCase().slice(0, 2)
     : 'JD';
 
-  const tabs = [
-    { id: 'profile', label: 'Hồ sơ', icon: User },
-    ...(user?.role === 'admin' || user?.role === 'instructor' ? [] : [
-      { id: 'courses', label: 'Khóa học', icon: BookOpen },
-      { id: 'payments', label: 'Lịch sử thanh toán', icon: CreditCard },
-      { id: 'settings', label: 'Cài đặt', icon: Settings },
-    ])
-  ];
+  // Tabs thay đổi theo role
+  const tabs =
+    user?.role === 'instructor'
+      ? [
+          { id: 'profile', label: 'Hồ sơ cá nhân', icon: User },
+          { id: 'instructor-profile', label: 'Hồ sơ giảng dạy', icon: Award },
+        ]
+      : user?.role === 'admin'
+      ? [
+          { id: 'profile', label: 'Hồ sơ', icon: User },
+        ]
+      : [
+          { id: 'profile', label: 'Hồ sơ', icon: User },
+          { id: 'courses', label: 'Khóa học', icon: BookOpen },
+          { id: 'certificates', label: 'Chứng chỉ', icon: Award },
+          { id: 'settings', label: 'Cài đặt', icon: Settings },
+        ];
 
   // Đảm bảo tab đang active luôn là một trong các tab hợp lệ
   useMemo(() => {
@@ -65,26 +90,52 @@ const [activeTab, setActiveTab] = useState(initialTabFromQuery);
     }
   }, [tabs, activeTab]);
 
-  useEffect(() => {
-    const tabFromQuery = searchParams.get('tab');
-    if (tabFromQuery && tabFromQuery !== activeTab) {
-      setActiveTab(tabFromQuery);
-    }
-  }, [searchParams, activeTab]);
-
   const handleSaveProfile = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setIsSavingProfile(true);
-    try {
-      const res = await userApi.updateProfile({ fullName: profileForm.fullName });
-      updateUser(res.data.user);
-      toast.success('Cập nhật hồ sơ thành công!');
-    } catch (err: unknown) {
-      toast.error(err instanceof Error ? err.message : 'Cập nhật thất bại.');
-    } finally {
-      setIsSavingProfile(false);
-    }
-  };
+    e.preventDefault();
+    setIsSavingProfile(true);
+    try {
+      const payload: Parameters<typeof userApi.updateProfile>[0] = {};
+
+      // Chỉ gửi fullName khi đang ở tab hồ sơ cá nhân
+      if (activeTab === 'profile') {
+        payload.fullName = profileForm.fullName.trim();
+      }
+
+      // Chỉ giảng viên mới được chỉnh sửa thông tin instructor của chính mình
+      if (user?.role === 'instructor') {
+        const website = profileForm.instructorWebsite.trim();
+        const facebook = profileForm.instructorFacebook.trim();
+        const youtube = profileForm.instructorYoutube.trim();
+        const linkedin = profileForm.instructorLinkedin.trim();
+
+        payload.instructorHeadline = profileForm.instructorHeadline?.trim() || undefined;
+        payload.instructorBio = profileForm.instructorBio?.trim() || undefined;
+        payload.instructorWebsite = website || undefined;
+        payload.instructorFacebook = facebook || undefined;
+        payload.instructorYoutube = youtube || undefined;
+        payload.instructorLinkedin = linkedin || undefined;
+        payload.instructorSkills = profileForm.instructorSkillsText
+          ? profileForm.instructorSkillsText
+              .split(',')
+              .map((s) => s.trim())
+              .filter(Boolean)
+          : [];
+      }
+
+      const res = await userApi.updateProfile(payload);
+      updateUser(res.data.user);
+      toast.success('Cập nhật hồ sơ thành công!');
+    } catch (err: unknown) {
+      const e = err as Error & { responseData?: { errors?: { field: string; message: string }[] } };
+      const details = e.responseData?.errors;
+      const msg = details?.length
+        ? details.map((x) => `${x.field}: ${x.message}`).join(' • ')
+        : e.message || 'Cập nhật thất bại.';
+      toast.error(msg);
+    } finally {
+      setIsSavingProfile(false);
+    }
+  };
 
   const handleChangePassword = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -152,32 +203,18 @@ const [activeTab, setActiveTab] = useState(initialTabFromQuery);
                     key={tab.id}
                     onClick={() => {
                       setActiveTab(tab.id);
-
-                      if (tab.id === 'payments' && !paymentsLoaded && !paymentsLoading) {
-                        setPaymentsLoading(true);
-                        paymentApi
-                          .getHistory({ status: 'success' })
+                      if (tab.id === 'certificates' && !certLoaded && !certLoading) {
+                        setCertLoading(true);
+                        certificateApi
+                          .myCertificates()
                           .then((res) => {
-                            setPayments(res.data?.payments || []);
-                            setPaymentsLoaded(true);
+                            setCertificates(res.data?.certificates ?? []);
+                            setCertLoaded(true);
                           })
                           .catch((err: unknown) => {
-                            toast.error(err instanceof Error ? err.message : 'Không thể tải lịch sử thanh toán.');
+                            toast.error(err instanceof Error ? err.message : 'Không thể tải chứng chỉ.');
                           })
-                          .finally(() => setPaymentsLoading(false));
-                      }
-                      if (tab.id === 'courses' && !coursesLoaded && !coursesLoading) {
-                        setCoursesLoading(true);
-                        enrollmentApi
-                          .getMyEnrollments()
-                          .then((res) => {
-                            setEnrolledCourses(res.data?.enrollments || []);
-                            setCoursesLoaded(true);
-                          })
-                          .catch((err: unknown) => {
-                            toast.error(err instanceof Error ? err.message : 'Không thể tải danh sách khóa học.');
-                          })
-                          .finally(() => setCoursesLoading(false));
+                          .finally(() => setCertLoading(false));
                       }
                     }}
                     className={`w-full flex items-center space-x-3 px-4 py-3 rounded-lg transition-all ${activeTab === tab.id
@@ -223,7 +260,12 @@ const [activeTab, setActiveTab] = useState(initialTabFromQuery);
             <input
               type="text"
               value={profileForm.fullName}
-              onChange={(e) => setProfileForm({ fullName: e.target.value })}
+              onChange={(e) =>
+                setProfileForm((prev) => ({
+                  ...prev,
+                  fullName: e.target.value,
+                }))
+              }
               className="w-full px-4 py-3 bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/50"
               required
               disabled={isSavingProfile}
@@ -317,58 +359,167 @@ const [activeTab, setActiveTab] = useState(initialTabFromQuery);
       </div>
     )}
 
-    {/* ── Courses Tab ── */}
-    {activeTab === 'courses' && (
+    {/* ── Instructor Profile Tab (only for instructors) ── */}
+    {user?.role === 'instructor' && activeTab === 'instructor-profile' && (
+      <div className="space-y-8">
+        <form onSubmit={handleSaveProfile} className="space-y-4">
+          <h2 className="text-2xl font-bold">Hồ sơ giảng viên</h2>
+
+          <div>
+            <label className="block text-sm font-medium mb-2">Tiêu đề ngắn (headline)</label>
+            <input
+              type="text"
+              value={profileForm.instructorHeadline}
+              onChange={(e) =>
+                setProfileForm((prev) => ({ ...prev, instructorHeadline: e.target.value }))
+              }
+              placeholder="Ví dụ: Frontend Developer – React, TypeScript & UI/UX"
+              className="w-full px-4 py-3 bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/50"
+              disabled={isSavingProfile}
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium mb-2">Giới thiệu bản thân</label>
+            <textarea
+              value={profileForm.instructorBio}
+              onChange={(e) =>
+                setProfileForm((prev) => ({ ...prev, instructorBio: e.target.value }))
+              }
+              rows={5}
+              placeholder="Chia sẻ kinh nghiệm giảng dạy, kỹ năng và thành tựu của bạn..."
+              className="w-full px-4 py-3 bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/50 resize-none"
+              disabled={isSavingProfile}
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium mb-2">Kỹ năng giảng dạy</label>
+            <input
+              type="text"
+              value={profileForm.instructorSkillsText}
+              onChange={(e) =>
+                setProfileForm((prev) => ({ ...prev, instructorSkillsText: e.target.value }))
+              }
+              placeholder="Ví dụ: React, TypeScript, Next.js, Tailwind CSS (ngăn cách bằng dấu phẩy)"
+              className="w-full px-4 py-3 bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/50"
+              disabled={isSavingProfile}
+            />
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium mb-2">Website cá nhân</label>
+              <input
+                type="url"
+                value={profileForm.instructorWebsite}
+                onChange={(e) =>
+                  setProfileForm((prev) => ({ ...prev, instructorWebsite: e.target.value }))
+                }
+                placeholder="https://your-portfolio.com"
+                className="w-full px-4 py-3 bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/50"
+                disabled={isSavingProfile}
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium mb-2">Facebook</label>
+              <input
+                type="url"
+                value={profileForm.instructorFacebook}
+                onChange={(e) =>
+                  setProfileForm((prev) => ({ ...prev, instructorFacebook: e.target.value }))
+                }
+                placeholder="https://facebook.com/username"
+                className="w-full px-4 py-3 bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/50"
+                disabled={isSavingProfile}
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium mb-2">YouTube</label>
+              <input
+                type="url"
+                value={profileForm.instructorYoutube}
+                onChange={(e) =>
+                  setProfileForm((prev) => ({ ...prev, instructorYoutube: e.target.value }))
+                }
+                placeholder="https://youtube.com/@channel"
+                className="w-full px-4 py-3 bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/50"
+                disabled={isSavingProfile}
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium mb-2">LinkedIn</label>
+              <input
+                type="url"
+                value={profileForm.instructorLinkedin}
+                onChange={(e) =>
+                  setProfileForm((prev) => ({ ...prev, instructorLinkedin: e.target.value }))
+                }
+                placeholder="https://linkedin.com/in/username"
+                className="w-full px-4 py-3 bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/50"
+                disabled={isSavingProfile}
+              />
+            </div>
+          </div>
+
+          <button
+            type="submit"
+            disabled={isSavingProfile}
+            className="flex items-center space-x-2 px-6 py-3 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+          >
+            {isSavingProfile && <Loader2 className="w-4 h-4 animate-spin" />}
+            <span>Lưu hồ sơ giảng viên</span>
+          </button>
+        </form>
+      </div>
+    )}
+
+    {/* ── Certificates Tab ── */}
+    {activeTab === 'certificates' && (
       <div>
-        <h2 className="text-2xl font-bold mb-6">Khóa học đã đăng ký</h2>
+        <h2 className="text-2xl font-bold mb-6">Chứng chỉ</h2>
 
-        {coursesLoading ? (
-          <p className="text-sm text-muted-foreground">Đang tải danh sách khóa học...</p>
-        ) : enrolledCourses.length === 0 ? (
-          <p className="text-sm text-muted-foreground">Bạn chưa đăng ký khóa học nào.</p>
+        {certLoading ? (
+          <p className="text-sm text-muted-foreground">Đang tải chứng chỉ...</p>
+        ) : certificates.length === 0 ? (
+          <p className="text-sm text-muted-foreground">Bạn chưa có chứng chỉ nào.</p>
         ) : (
-          <div className="grid gap-4">
-            {enrolledCourses.map((enrollment) => (
+          <div className="grid md:grid-cols-2 gap-4">
+            {certificates.map((c) => (
               <div
-                key={enrollment._id}
-                className="flex flex-col sm:flex-row items-start sm:items-center space-y-4 sm:space-y-0 sm:space-x-4 p-4 border border-border rounded-lg hover:border-primary/50 transition-all"
+                key={c._id}
+                className="p-6 border-2 border-primary/20 rounded-xl bg-gradient-to-br from-primary/5 to-accent/5"
               >
-                <div className="w-full sm:w-32 h-20 bg-primary/5 border border-primary/20 rounded-lg overflow-hidden flex-shrink-0 flex items-center justify-center relative">
-                  {enrollment.courseId?.thumbnail ? (
-                    <img 
-                      src={enrollment.courseId.thumbnail} 
-                      alt={enrollment.courseId.title} 
-                      className="absolute inset-0 w-full h-full object-cover"
-                    />
-                  ) : (
-                    <BookOpen className="w-8 h-8 text-primary/40" />
-                  )}
-                </div>
-                
-                <div className="flex-1">
-                  <h3 className="font-semibold mb-2 line-clamp-1">{enrollment.courseId?.title ?? 'Khóa học không tồn tại'}</h3>
-                  <div className="w-full max-w-sm">
-                    <div className="flex justify-between text-xs mb-1">
-                      <span className="text-muted-foreground">Tiến độ</span>
-                      <span className="font-medium">{enrollment.progress}%</span>
-                    </div>
-                    <div className="h-2 w-full bg-muted rounded-full overflow-hidden">
-                      <div 
-                        className="h-full bg-primary transition-all duration-500 ease-out" 
-                        style={{ width: `${enrollment.progress}%` }}
-                      />
-                    </div>
-                  </div>
-                </div>
+                <Award className="w-12 h-12 text-primary mb-4" />
 
-                <div className="w-full sm:w-auto mt-4 sm:mt-0">
-                  <button 
-                    onClick={() => navigate(`/learn/${enrollment.courseId?._id}`)}
-                    className="w-full sm:w-auto px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors text-sm font-medium whitespace-nowrap"
-                  >
-                    Tiếp tục học
-                  </button>
-                </div>
+                <h3 className="font-semibold mb-1">
+                  {c.courseId?.title ?? 'Chứng chỉ'}
+                </h3>
+
+                <p className="text-xs text-muted-foreground mb-3">
+                  Mã: {c.certificateId}
+                </p>
+
+                <p className="text-sm text-muted-foreground mb-4">
+                  Ngày cấp: {c.issuedAt
+                    ? new Date(c.issuedAt).toLocaleDateString()
+                    : '—'}
+                </p>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    const courseId = c.courseId?._id;
+                    if (!courseId) {
+                      toast.error('Không tìm thấy khóa học của chứng chỉ này.');
+                      return;
+                    }
+                    navigate(`/courses/${courseId}/certificate`);
+                  }}
+                  className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-primary/10 text-primary hover:bg-primary/15 text-sm font-medium"
+                >
+                  Xem chi tiết chứng chỉ
+                </button>
               </div>
             ))}
           </div>
@@ -376,59 +527,29 @@ const [activeTab, setActiveTab] = useState(initialTabFromQuery);
       </div>
     )}
 
-    {/* ── Payments Tab ── */}
-    {activeTab === 'payments' && (
-      <div>
-        <h2 className="text-2xl font-bold mb-6">Lịch sử thanh toán</h2>
-        
-        {paymentsLoading ? (
-          <p className="text-sm text-muted-foreground">Đang tải lịch sử thanh toán...</p>
-        ) : payments.length === 0 ? (
-          <p className="text-sm text-muted-foreground">Bạn chưa có giao dịch thanh toán thành công nào.</p>
-        ) : (
-          <div className="overflow-x-auto border border-border rounded-lg">
-            <table className="w-full text-sm text-left">
-              <thead className="text-xs uppercase bg-muted/50 border-b border-border">
-                <tr>
-                  <th className="px-6 py-3">Mã đơn hàng</th>
-                  <th className="px-6 py-3">Ngày thanh toán</th>
-                  <th className="px-6 py-3">Nội dung</th>
-                  <th className="px-6 py-3">Số tiền</th>
-                  <th className="px-6 py-3">Trạng thái</th>
-                </tr>
-              </thead>
-              <tbody>
-                {payments.map((p) => (
-                  <tr key={p._id} className="border-b border-border hover:bg-muted/20">
-                    <td className="px-6 py-4 font-medium">{p.orderId}</td>
-                    <td className="px-6 py-4 text-muted-foreground">
-                      {new Date(p.createdAt).toLocaleDateString('vi-VN', {
-                        year: 'numeric',
-                        month: '2-digit',
-                        day: '2-digit',
-                        hour: '2-digit',
-                        minute: '2-digit'
-                      })}
-                    </td>
-                    <td className="px-6 py-4 max-w-[200px] truncate" title={p.orderInfo}>
-                      {p.orderInfo}
-                    </td>
-                    <td className="px-6 py-4 font-semibold text-primary">
-                      {p.amount.toLocaleString('vi-VN')} ₫
-                    </td>
-                    <td className="px-6 py-4">
-                      <span className="px-2 py-1 text-xs rounded-full bg-green-500/10 text-green-500">
-                        Thành công
-                      </span>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+    {/* ── Courses Tab ── */}
+    {activeTab === 'courses' && (
+                <div>
+                  <h2 className="text-2xl font-bold mb-6">Khóa học đã đăng ký</h2>
+                  <div className="grid gap-4">
+                    {[1, 2, 3].map((item) => (
+                      <div
+                        key={item}
+                        className="flex items-center space-x-4 p-4 border border-border rounded-lg hover:border-primary/50 transition-all"
+                      >
+                        <div className="w-20 h-14 bg-primary/10 rounded flex-shrink-0" />
+                        <div className="flex-1">
+                          <h3 className="font-semibold mb-1">React & TypeScript</h3>
+                          <p className="text-sm text-muted-foreground">Tiến độ: 75%</p>
+                        </div>
+                        <button className="px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors">
+                          Tiếp tục
+                        </button>
+              </div>
+            ))}
           </div>
-        )}
-      </div>
-    )}
+        </div>
+      )}
 
     {/* ── Settings Tab ── */}
     {activeTab === 'settings' && (

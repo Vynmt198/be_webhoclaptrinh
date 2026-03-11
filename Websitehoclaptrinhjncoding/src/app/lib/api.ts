@@ -28,9 +28,11 @@ async function request<T>(
 
     const data = await res.json();
 
-    // Propagate backend error messages as thrown errors
+    // Propagate backend error messages as thrown errors (attach response for validation details)
     if (!res.ok) {
-        throw new Error(data.message || `Request failed with status ${res.status}`);
+        const err = new Error(data.message || `Request failed with status ${res.status}`) as Error & { responseData?: unknown };
+        (err as Error & { responseData?: unknown }).responseData = data;
+        throw err;
     }
 
     return data as T;
