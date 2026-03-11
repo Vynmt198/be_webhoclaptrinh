@@ -33,7 +33,9 @@ export function InstructorProfileView() {
   }, [userId]);
 
   const isOwnProfile =
-    !!currentUser && ((profile && currentUser._id === profile._id) || (!profile && userId && currentUser._id === userId));
+    !!currentUser &&
+    currentUser.role === 'instructor' &&
+    ((profile && currentUser._id === profile._id) || (!profile && userId && currentUser._id === userId));
 
   const displayName = profile?.fullName || navState?.instructorName || '-';
   const avatarUrl =
@@ -156,7 +158,7 @@ export function InstructorProfileView() {
 
               {isOwnProfile && (
                 <Link
-                  to="/account"
+                  to="/account?tab=instructor-profile"
                   className="mt-6 inline-flex items-center gap-2 px-6 py-3 bg-primary text-primary-foreground rounded-xl font-semibold hover:opacity-90 transition-opacity"
                 >
                   <Pencil className="w-4 h-4" />
