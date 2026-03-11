@@ -64,7 +64,7 @@ export function AssignmentExam() {
   useEffect(() => {
     if (remainingSeconds == null || remainingSeconds <= 0 || result) return;
     const timer = setInterval(() => {
-      setRemainingSeconds((prev) => {
+      setRemainingSeconds((prev) => { 
         if (prev == null) return prev;
         if (prev <= 1) {
           clearInterval(timer);
