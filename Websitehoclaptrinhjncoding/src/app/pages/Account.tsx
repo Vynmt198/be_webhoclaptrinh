@@ -1,10 +1,11 @@
 import { useState, useMemo } from 'react';
 import { motion } from 'motion/react';
-import { User, BookOpen, Award, Settings, Bell, Loader2, Eye, EyeOff } from 'lucide-react';
+import { User, BookOpen, Settings, Bell, Loader2, Eye, EyeOff, CreditCard } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAuth } from '@/app/context/AuthContext';
-import { userApi, certificateApi, type Certificate } from '@/app/lib/api';
+import { userApi, paymentApi, type PaymentInfo, enrollmentApi, type EnrollmentWithCourse } from '@/app/lib/api';
 import { useSearchParams, useNavigate } from 'react-router-dom';
+import { useEffect } from 'react';
 
 export function Account() {
 const { user, updateUser, logout } = useAuth();
@@ -14,9 +15,6 @@ const [searchParams] = useSearchParams();
 const initialTabFromQuery = searchParams.get('tab') ?? 'profile';
 const [activeTab, setActiveTab] = useState(initialTabFromQuery);
 
-const [certLoading, setCertLoading] = useState(false);
-const [certificates, setCertificates] = useState<Certificate[]>([]);
-const [certLoaded, setCertLoaded] = useState(false);
 
   // Profile form state
   const [profileForm, setProfileForm] = useState({
@@ -34,6 +32,16 @@ const [certLoaded, setCertLoaded] = useState(false);
   const [showPw, setShowPw] = useState({ current: false, newPw: false, confirm: false });
   const togglePw = (field: keyof typeof showPw) => setShowPw((p) => ({ ...p, [field]: !p[field] }));
 
+  // Payment History state
+  const [paymentsLoading, setPaymentsLoading] = useState(false);
+  const [payments, setPayments] = useState<PaymentInfo[]>([]);
+  const [paymentsLoaded, setPaymentsLoaded] = useState(false);
+
+  // Enrolled Courses state
+  const [coursesLoading, setCoursesLoading] = useState(false);
+  const [enrolledCourses, setEnrolledCourses] = useState<EnrollmentWithCourse[]>([]);
+  const [coursesLoaded, setCoursesLoaded] = useState(false);
+
   // Derive avatar initials
   const initials = user?.fullName
     ? user.fullName.split(' ').map((w: string) => w[0]).join('').toUpperCase().slice(0, 2)
@@ -43,7 +51,7 @@ const [certLoaded, setCertLoaded] = useState(false);
     { id: 'profile', label: 'Hồ sơ', icon: User },
     ...(user?.role === 'admin' || user?.role === 'instructor' ? [] : [
       { id: 'courses', label: 'Khóa học', icon: BookOpen },
-      { id: 'certificates', label: 'Chứng chỉ', icon: Award },
+      { id: 'payments', label: 'Lịch sử thanh toán', icon: CreditCard },
       { id: 'settings', label: 'Cài đặt', icon: Settings },
     ])
   ];
@@ -56,6 +64,13 @@ const [certLoaded, setCertLoaded] = useState(false);
       setActiveTab('profile');
     }
   }, [tabs, activeTab]);
+
+  useEffect(() => {
+    const tabFromQuery = searchParams.get('tab');
+    if (tabFromQuery && tabFromQuery !== activeTab) {
+      setActiveTab(tabFromQuery);
+    }
+  }, [searchParams, activeTab]);
 
   const handleSaveProfile = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -137,18 +152,32 @@ const [certLoaded, setCertLoaded] = useState(false);
                     key={tab.id}
                     onClick={() => {
                       setActiveTab(tab.id);
-                      if (tab.id === 'certificates' && !certLoaded && !certLoading) {
-                        setCertLoading(true);
-                        certificateApi
-                          .myCertificates()
+
+                      if (tab.id === 'payments' && !paymentsLoaded && !paymentsLoading) {
+                        setPaymentsLoading(true);
+                        paymentApi
+                          .getHistory({ status: 'success' })
                           .then((res) => {
-                            setCertificates(res.data?.certificates ?? []);
-                            setCertLoaded(true);
+                            setPayments(res.data?.payments || []);
+                            setPaymentsLoaded(true);
                           })
                           .catch((err: unknown) => {
-                            toast.error(err instanceof Error ? err.message : 'Không thể tải chứng chỉ.');
+                            toast.error(err instanceof Error ? err.message : 'Không thể tải lịch sử thanh toán.');
                           })
-                          .finally(() => setCertLoading(false));
+                          .finally(() => setPaymentsLoading(false));
+                      }
+                      if (tab.id === 'courses' && !coursesLoaded && !coursesLoading) {
+                        setCoursesLoading(true);
+                        enrollmentApi
+                          .getMyEnrollments()
+                          .then((res) => {
+                            setEnrolledCourses(res.data?.enrollments || []);
+                            setCoursesLoaded(true);
+                          })
+                          .catch((err: unknown) => {
+                            toast.error(err instanceof Error ? err.message : 'Không thể tải danh sách khóa học.');
+                          })
+                          .finally(() => setCoursesLoading(false));
                       }
                     }}
                     className={`w-full flex items-center space-x-3 px-4 py-3 rounded-lg transition-all ${activeTab === tab.id
@@ -288,52 +317,58 @@ const [certLoaded, setCertLoaded] = useState(false);
       </div>
     )}
 
-    {/* ── Certificates Tab ── */}
-    {activeTab === 'certificates' && (
+    {/* ── Courses Tab ── */}
+    {activeTab === 'courses' && (
       <div>
-        <h2 className="text-2xl font-bold mb-6">Chứng chỉ</h2>
+        <h2 className="text-2xl font-bold mb-6">Khóa học đã đăng ký</h2>
 
-        {certLoading ? (
-          <p className="text-sm text-muted-foreground">Đang tải chứng chỉ...</p>
-        ) : certificates.length === 0 ? (
-          <p className="text-sm text-muted-foreground">Bạn chưa có chứng chỉ nào.</p>
+        {coursesLoading ? (
+          <p className="text-sm text-muted-foreground">Đang tải danh sách khóa học...</p>
+        ) : enrolledCourses.length === 0 ? (
+          <p className="text-sm text-muted-foreground">Bạn chưa đăng ký khóa học nào.</p>
         ) : (
-          <div className="grid md:grid-cols-2 gap-4">
-            {certificates.map((c) => (
+          <div className="grid gap-4">
+            {enrolledCourses.map((enrollment) => (
               <div
-                key={c._id}
-                className="p-6 border-2 border-primary/20 rounded-xl bg-gradient-to-br from-primary/5 to-accent/5"
+                key={enrollment._id}
+                className="flex flex-col sm:flex-row items-start sm:items-center space-y-4 sm:space-y-0 sm:space-x-4 p-4 border border-border rounded-lg hover:border-primary/50 transition-all"
               >
-                <Award className="w-12 h-12 text-primary mb-4" />
+                <div className="w-full sm:w-32 h-20 bg-primary/5 border border-primary/20 rounded-lg overflow-hidden flex-shrink-0 flex items-center justify-center relative">
+                  {enrollment.courseId?.thumbnail ? (
+                    <img 
+                      src={enrollment.courseId.thumbnail} 
+                      alt={enrollment.courseId.title} 
+                      className="absolute inset-0 w-full h-full object-cover"
+                    />
+                  ) : (
+                    <BookOpen className="w-8 h-8 text-primary/40" />
+                  )}
+                </div>
+                
+                <div className="flex-1">
+                  <h3 className="font-semibold mb-2 line-clamp-1">{enrollment.courseId?.title ?? 'Khóa học không tồn tại'}</h3>
+                  <div className="w-full max-w-sm">
+                    <div className="flex justify-between text-xs mb-1">
+                      <span className="text-muted-foreground">Tiến độ</span>
+                      <span className="font-medium">{enrollment.progress}%</span>
+                    </div>
+                    <div className="h-2 w-full bg-muted rounded-full overflow-hidden">
+                      <div 
+                        className="h-full bg-primary transition-all duration-500 ease-out" 
+                        style={{ width: `${enrollment.progress}%` }}
+                      />
+                    </div>
+                  </div>
+                </div>
 
-                <h3 className="font-semibold mb-1">
-                  {c.courseId?.title ?? 'Chứng chỉ'}
-                </h3>
-
-                <p className="text-xs text-muted-foreground mb-3">
-                  Mã: {c.certificateId}
-                </p>
-
-                <p className="text-sm text-muted-foreground mb-4">
-                  Ngày cấp: {c.issuedAt
-                    ? new Date(c.issuedAt).toLocaleDateString()
-                    : '—'}
-                </p>
-
-                <button
-                  type="button"
-                  onClick={() => {
-                    const courseId = c.courseId?._id;
-                    if (!courseId) {
-                      toast.error('Không tìm thấy khóa học của chứng chỉ này.');
-                      return;
-                    }
-                    navigate(`/courses/${courseId}/certificate`);
-                  }}
-                  className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-primary/10 text-primary hover:bg-primary/15 text-sm font-medium"
-                >
-                  Xem chi tiết chứng chỉ
-                </button>
+                <div className="w-full sm:w-auto mt-4 sm:mt-0">
+                  <button 
+                    onClick={() => navigate(`/learn/${enrollment.courseId?._id}`)}
+                    className="w-full sm:w-auto px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors text-sm font-medium whitespace-nowrap"
+                  >
+                    Tiếp tục học
+                  </button>
+                </div>
               </div>
             ))}
           </div>
@@ -341,29 +376,59 @@ const [certLoaded, setCertLoaded] = useState(false);
       </div>
     )}
 
-    {/* ── Courses Tab ── */}
-    {activeTab === 'courses' && (
-                <div>
-                  <h2 className="text-2xl font-bold mb-6">Khóa học đã đăng ký</h2>
-                  <div className="grid gap-4">
-                    {[1, 2, 3].map((item) => (
-                      <div
-                        key={item}
-                        className="flex items-center space-x-4 p-4 border border-border rounded-lg hover:border-primary/50 transition-all"
-                      >
-                        <div className="w-20 h-14 bg-primary/10 rounded flex-shrink-0" />
-                        <div className="flex-1">
-                          <h3 className="font-semibold mb-1">React & TypeScript</h3>
-                          <p className="text-sm text-muted-foreground">Tiến độ: 75%</p>
-                        </div>
-                        <button className="px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors">
-                          Tiếp tục
-                        </button>
-              </div>
-            ))}
+    {/* ── Payments Tab ── */}
+    {activeTab === 'payments' && (
+      <div>
+        <h2 className="text-2xl font-bold mb-6">Lịch sử thanh toán</h2>
+        
+        {paymentsLoading ? (
+          <p className="text-sm text-muted-foreground">Đang tải lịch sử thanh toán...</p>
+        ) : payments.length === 0 ? (
+          <p className="text-sm text-muted-foreground">Bạn chưa có giao dịch thanh toán thành công nào.</p>
+        ) : (
+          <div className="overflow-x-auto border border-border rounded-lg">
+            <table className="w-full text-sm text-left">
+              <thead className="text-xs uppercase bg-muted/50 border-b border-border">
+                <tr>
+                  <th className="px-6 py-3">Mã đơn hàng</th>
+                  <th className="px-6 py-3">Ngày thanh toán</th>
+                  <th className="px-6 py-3">Nội dung</th>
+                  <th className="px-6 py-3">Số tiền</th>
+                  <th className="px-6 py-3">Trạng thái</th>
+                </tr>
+              </thead>
+              <tbody>
+                {payments.map((p) => (
+                  <tr key={p._id} className="border-b border-border hover:bg-muted/20">
+                    <td className="px-6 py-4 font-medium">{p.orderId}</td>
+                    <td className="px-6 py-4 text-muted-foreground">
+                      {new Date(p.createdAt).toLocaleDateString('vi-VN', {
+                        year: 'numeric',
+                        month: '2-digit',
+                        day: '2-digit',
+                        hour: '2-digit',
+                        minute: '2-digit'
+                      })}
+                    </td>
+                    <td className="px-6 py-4 max-w-[200px] truncate" title={p.orderInfo}>
+                      {p.orderInfo}
+                    </td>
+                    <td className="px-6 py-4 font-semibold text-primary">
+                      {p.amount.toLocaleString('vi-VN')} ₫
+                    </td>
+                    <td className="px-6 py-4">
+                      <span className="px-2 py-1 text-xs rounded-full bg-green-500/10 text-green-500">
+                        Thành công
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
-        </div>
-      )}
+        )}
+      </div>
+    )}
 
     {/* ── Settings Tab ── */}
     {activeTab === 'settings' && (

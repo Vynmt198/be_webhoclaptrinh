@@ -22,7 +22,12 @@ export function Layout() {
     navigate('/login');
   };
 
-  const isActive = (path) => location.pathname === path;
+  const isActive = (path) => {
+    if (path.includes('?')) {
+      return location.pathname + location.search === path;
+    }
+    return location.pathname === path;
+  };
 
   const isLearner = isAuthenticated && !['admin', 'instructor'].includes(user?.role || '');
   const isInstructor = isAuthenticated && user?.role === 'instructor';
@@ -32,7 +37,7 @@ export function Layout() {
     { path: "/courses", label: "Khóa học" },
     ...(isLearner ? [
       { path: "/my-courses", label: "Khóa của tôi" },
-      { path: "/account", label: "Chứng chỉ", icon: Award },
+      { path: "/certificates", label: "Chứng chỉ", icon: Award },
     ] : []),
     ...(isInstructor ? [{ path: "/my-courses", label: "Khóa tôi dạy" }] : []),
   ];
