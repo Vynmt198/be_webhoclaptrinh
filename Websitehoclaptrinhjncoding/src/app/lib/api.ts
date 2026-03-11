@@ -218,6 +218,8 @@ export const adminApi = {
                     user: string;
                     content: string;
                     target: string;
+                    lessonId?: string | null;
+                    lessonTitle?: string;
                     date: string;
                     status: string;
                     isReply: boolean;
@@ -231,6 +233,44 @@ export const adminApi = {
 
     deleteContentComment: (id: string) =>
         request<{ success: boolean; message: string }>(`/admin/content/comments/${id}`, { method: 'DELETE' }),
+
+    getContentReports: (params?: { status?: string; page?: number; limit?: number }) => {
+        const query = new URLSearchParams(
+            Object.entries(params || {})
+                .filter(([, v]) => v !== undefined && v !== '')
+                .map(([k, v]) => [k, String(v)])
+        ).toString();
+        return request<{
+            success: boolean;
+            data: {
+                reports: {
+                    _id: string;
+                    discussionId: string | null;
+                    status: string;
+                    reason: string | null;
+                    reportedAt: string;
+                    reportedBy: string;
+                    resolvedAt: string | null;
+                    resolvedBy: string | null;
+                    discussion: {
+                        content: string;
+                        user: string;
+                        courseTitle: string;
+                        lessonTitle: string;
+                        status: string;
+                        isReply: boolean;
+                    } | null;
+                }[];
+                pagination: Pagination;
+            };
+        }>(`/admin/content/reports${query ? `?${query}` : ''}`);
+    },
+
+    resolveContentReport: (reportId: string, payload: { status: 'resolved' | 'dismissed' }) =>
+        request<{ success: boolean; message?: string; data?: { report: { _id: string; status: string } } }>(
+            `/admin/content/reports/${reportId}`,
+            { method: 'PATCH', body: payload as Record<string, unknown> }
+        ),
 
     getContentReviews: (params?: { search?: string; page?: number; limit?: number }) => {
         const query = new URLSearchParams(
@@ -430,6 +470,8 @@ export interface DiscussionPost {
     courseId: string;
     userId: { _id: string; fullName: string; avatar?: string } | string;
     parentId: string | null;
+    /** Gắn với bài học (chỉ post gốc; reply kế thừa từ parent) */
+    lessonId?: string | { _id: string; title?: string; order?: number } | null;
     title: string | null;
     content: string;
     isPinned?: boolean;
@@ -441,7 +483,7 @@ export interface DiscussionPost {
 }
 
 export const discussionApi = {
-    getList: (courseId: string, params?: { page?: number; limit?: number }) => {
+    getList: (courseId: string, params?: { page?: number; limit?: number; lessonId?: string }) => {
         const q = new URLSearchParams(
             Object.entries(params || {})
                 .filter(([, v]) => v != null && String(v) !== '')
@@ -463,7 +505,7 @@ export const discussionApi = {
             data: { replies: DiscussionPost[]; pagination: { total: number; page: number; limit: number; pages: number } };
         }>(`/discussions/${courseId}/${postId}/replies${q ? `?${q}` : ''}`);
     },
-    create: (payload: { courseId: string; title?: string; content: string }) =>
+    create: (payload: { courseId: string; title?: string; content: string; lessonId?: string }) =>
         request<{ success: boolean; message?: string; data: { discussion: DiscussionPost } }>('/discussions', {
             method: 'POST',
             body: payload as Record<string, unknown>,
@@ -477,8 +519,15 @@ export const discussionApi = {
         request<{ success: boolean; data: { likesCount: number } }>(`/discussions/${postId}/like`, { method: 'POST' }),
     unlike: (postId: string) =>
         request<{ success: boolean; data: { likesCount: number } }>(`/discussions/${postId}/unlike`, { method: 'POST' }),
+    pin: (postId: string) =>
+        request<{ success: boolean; data: { discussion: DiscussionPost } }>(`/discussions/${postId}/pin`, { method: 'PUT' }),
     delete: (id: string) =>
         request<{ success: boolean }>(`/discussions/${id}`, { method: 'DELETE' }),
+    report: (discussionId: string, payload?: { reason?: string }) =>
+        request<{ success: boolean; message?: string }>(`/discussions/${discussionId}/report`, {
+            method: 'POST',
+            body: (payload ?? {}) as Record<string, unknown>,
+        }),
 };
 
 export const lessonApi = {

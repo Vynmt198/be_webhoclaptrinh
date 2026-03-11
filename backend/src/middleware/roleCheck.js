@@ -86,6 +86,53 @@ const isEnrolled = (courseIdParam = 'courseId') => {
 };
 
 /**
+ * Allow access if user is enrolled in the course, or is the course instructor, or admin.
+ * Used for Learn-page resources (e.g. my-assignment-submissions) so instructor can view the page.
+ */
+const isEnrolledOrCourseInstructor = (courseIdParam = 'id') => {
+    return async (req, res, next) => {
+        try {
+            const Enrollment = require('../models/Enrollment');
+            const Course = require('../models/Course');
+
+            const courseId = req.params[courseIdParam] || req.body.courseId;
+            const userId = req.user._id;
+
+            if (!courseId) {
+                return res.status(400).json({ success: false, message: 'Course ID required.' });
+            }
+
+            const enrollment = await Enrollment.findOne({
+                userId,
+                courseId,
+                status: 'active',
+            });
+
+            if (enrollment) {
+                req.enrollment = enrollment;
+                return next();
+            }
+
+            if (req.user.role === 'admin') {
+                return next();
+            }
+
+            const course = await Course.findById(courseId);
+            if (course && course.instructorId && course.instructorId.toString() === userId.toString()) {
+                return next();
+            }
+
+            return res.status(403).json({
+                success: false,
+                message: 'You must be enrolled in this course to access this resource.',
+            });
+        } catch (error) {
+            next(error);
+        }
+    };
+};
+
+/**
  * Check if user is the owner of a review
  * Requires id and userId fields to be populated in req
  */
@@ -356,6 +403,7 @@ module.exports = {
     isInstructor,
     requireRole,
     isEnrolled,
+    isEnrolledOrCourseInstructor,
     isCourseOwner,
     isLessonOwner,
     isLessonOwnerParam,

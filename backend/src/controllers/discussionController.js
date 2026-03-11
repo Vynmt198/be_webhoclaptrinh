@@ -1,4 +1,5 @@
 const Discussion = require('../models/Discussion');
+const DiscussionReport = require('../models/DiscussionReport');
 const Enrollment = require('../models/Enrollment');
 const Course = require('../models/Course');
 
@@ -35,9 +36,14 @@ exports.getDiscussions = async (req, res, next) => {
         const limitNumber = Number(req.query.limit) || 20;
         const skip = (pageNumber - 1) * limitNumber;
 
-        // Verify enrollment (BR10)
+        // Verify: learner must be enrolled; instructor of course or admin can view without enrollment
         const enrolled = await checkEnrolled(req.user._id, courseId);
-        if (!enrolled && req.user.role === 'learner') {
+        let canView = enrolled || req.user.role === 'admin';
+        if (!canView && req.user.role === 'instructor') {
+            const course = await Course.findById(courseId);
+            canView = !!(course && course.instructorId && course.instructorId.toString() === req.user._id.toString());
+        }
+        if (!canView) {
             return res.status(403).json({
                 success: false,
                 message: 'You must be enrolled in this course to view discussions.',
@@ -49,13 +55,19 @@ exports.getDiscussions = async (req, res, next) => {
             parentId: null,            // top-level posts only
             status: { $ne: 'deleted' },
         };
+        const lessonIdParam = req.query.lessonId;
+        if (lessonIdParam) {
+            filter.lessonId = lessonIdParam;
+        }
 
         const [posts, total] = await Promise.all([
             Discussion.find(filter)
                 .populate('userId', 'fullName avatar')
+                .populate('lessonId', 'title order')
                 .sort({ isPinned: -1, createdAt: -1 })
                 .skip(skip)
-                .limit(limitNumber),
+                .limit(limitNumber)
+                .lean(),
             Discussion.countDocuments(filter),
         ]);
 
@@ -89,8 +101,16 @@ exports.getReplies = async (req, res, next) => {
         const skip = (pageNumber - 1) * limitNumber;
 
         const enrolled = await checkEnrolled(req.user._id, courseId);
-        if (!enrolled && req.user.role === 'learner') {
+        let canViewReplies = enrolled || req.user.role === 'admin';
+        if (!canViewReplies && req.user.role === 'instructor') {
+            const course = await Course.findById(courseId);
+            canViewReplies = !!(course && course.instructorId && course.instructorId.toString() === req.user._id.toString());
+        }
+        if (!canViewReplies && req.user.role === 'learner') {
             return res.status(403).json({ success: false, message: 'You must be enrolled to view replies.' });
+        }
+        if (!canViewReplies) {
+            return res.status(403).json({ success: false, message: 'Access denied to view replies.' });
         }
 
         const [replies, total] = await Promise.all([
@@ -122,7 +142,7 @@ exports.getReplies = async (req, res, next) => {
  */
 exports.createDiscussion = async (req, res, next) => {
     try {
-        const { courseId, title, content } = req.body;
+        const { courseId, title, content, lessonId } = req.body;
         const userId = req.user._id;
 
         if (!courseId || !content) {
@@ -144,9 +164,11 @@ exports.createDiscussion = async (req, res, next) => {
             parentId: null,
             title: title || null,
             content,
+            lessonId: lessonId || null,
         });
 
         await discussion.populate('userId', 'fullName avatar');
+        await discussion.populate('lessonId', 'title order');
 
         return res.status(201).json({
             success: true,
@@ -335,6 +357,68 @@ exports.likeDiscussion = async (req, res, next) => {
             success: true,
             message: 'Liked successfully.',
             data: { likesCount: discussion.likesCount + 1 },
+        });
+    } catch (error) {
+        next(error);
+    }
+};
+
+/**
+ * POST /api/discussions/:id/report
+ * Report a discussion post or reply (spam, inappropriate, etc.)
+ * @access Private (auth) – user must be able to view the course
+ */
+exports.reportDiscussion = async (req, res, next) => {
+    try {
+        const { id: discussionId } = req.params;
+        const { reason } = req.body || {};
+        const userId = req.user._id;
+
+        const discussion = await Discussion.findById(discussionId)
+            .populate('courseId', '_id');
+        if (!discussion || discussion.status === 'deleted') {
+            return res.status(404).json({ success: false, message: 'Discussion not found.' });
+        }
+
+        const courseId = discussion.courseId?._id ?? discussion.courseId;
+        const canView = await checkCanParticipate(userId, courseId, req.user.role);
+        if (!canView) {
+            return res.status(403).json({
+                success: false,
+                message: 'You cannot report a comment in a course you do not have access to.',
+            });
+        }
+
+        const authorId = discussion.userId && discussion.userId._id ? discussion.userId._id : discussion.userId;
+        if (authorId && authorId.toString() === userId.toString()) {
+            return res.status(400).json({
+                success: false,
+                message: 'Bạn không thể báo cáo bình luận của chính mình.',
+            });
+        }
+
+        const existing = await DiscussionReport.findOne({
+            discussionId,
+            reportedBy: userId,
+            status: 'pending',
+        });
+        if (existing) {
+            return res.status(400).json({
+                success: false,
+                message: 'Bạn đã báo cáo bình luận này rồi. Admin sẽ xem xét.',
+            });
+        }
+
+        await DiscussionReport.create({
+            discussionId,
+            reportedBy: userId,
+            reason: reason && String(reason).trim() ? String(reason).trim().slice(0, 500) : undefined,
+            status: 'pending',
+        });
+
+        return res.status(201).json({
+            success: true,
+            message: 'Báo cáo đã gửi. Admin sẽ xem xét.',
         });
     } catch (error) {
         next(error);

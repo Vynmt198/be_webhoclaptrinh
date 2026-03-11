@@ -13,7 +13,7 @@ export function InstructorLayout() {
     }
 
     const links = [
-        { to: '/instructor/courses', icon: BookOpen, label: 'Khóa tôi dạy' },
+        { to: '/instructor/courses', icon: BookOpen, label: 'Quản lý khóa học' },
         { to: '/instructor/courses/new', icon: PlusCircle, label: 'Tạo khóa mới' },
         { to: '/instructor/analytics', icon: BarChart2, label: 'Thống kê' },
     ];

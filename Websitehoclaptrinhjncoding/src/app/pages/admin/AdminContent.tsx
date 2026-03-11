@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useState, Fragment } from 'react';
 import { motion } from 'motion/react';
-import { FileText, MessageSquareMore, HelpCircle, Search, Trash2, Eye, EyeOff, Loader2, ThumbsUp, MessageCircle, Star, ChevronDown, ChevronRight } from 'lucide-react';
+import { FileText, MessageSquareMore, HelpCircle, Search, Trash2, Eye, EyeOff, Loader2, ThumbsUp, MessageCircle, Star, ChevronDown, ChevronRight, ChevronLeft, Flag, XCircle } from 'lucide-react';
 import { toast } from 'sonner';
 import { adminApi, reviewApi } from '@/app/lib/api';
 
 export function AdminContent() {
-    const [activeTab, setActiveTab] = useState<'lessons' | 'comments' | 'quizzes' | 'reviews'>('lessons');
+    const [activeTab, setActiveTab] = useState<'lessons' | 'comments' | 'reports' | 'quizzes' | 'reviews'>('lessons');
     const [search, setSearch] = useState('');
     const [loading, setLoading] = useState(false);
     const [lessons, setLessons] = useState<{
@@ -23,6 +23,7 @@ export function AdminContent() {
         user: string;
         content: string;
         target: string;
+        lessonTitle?: string;
         date: string;
         status: string;
         isReply: boolean;
@@ -31,6 +32,8 @@ export function AdminContent() {
     }[]>([]);
     const [expandedCourses, setExpandedCourses] = useState<Set<string>>(new Set());
     const [expandedCommentIds, setExpandedCommentIds] = useState<Set<string>>(new Set());
+    const [commentPage, setCommentPage] = useState(1);
+    const [commentPagination, setCommentPagination] = useState<{ total: number; page: number; totalPages: number }>({ total: 0, page: 1, totalPages: 1 });
     const [reviewsError, setReviewsError] = useState<string | null>(null);
     const [reviews, setReviews] = useState<{
         _id: string;
@@ -41,6 +44,20 @@ export function AdminContent() {
         reviewText: string;
         date: string;
     }[]>([]);
+    const [reports, setReports] = useState<{
+        _id: string;
+        discussionId: string | null;
+        status: string;
+        reason: string | null;
+        reportedAt: string;
+        reportedBy: string;
+        resolvedAt: string | null;
+        resolvedBy: string | null;
+        discussion: { content: string; user: string; courseTitle: string; lessonTitle: string; status: string; isReply: boolean } | null;
+    }[]>([]);
+    const [reportStatusFilter, setReportStatusFilter] = useState<string>('pending');
+    const [reportPage, setReportPage] = useState(1);
+    const [reportPagination, setReportPagination] = useState<{ total: number; page: number; totalPages: number }>({ total: 0, page: 1, totalPages: 1 });
 
     const dateFormatter = useMemo(
         () => new Intl.DateTimeFormat('vi-VN', { year: 'numeric', month: '2-digit', day: '2-digit' }),
@@ -57,13 +74,28 @@ export function AdminContent() {
                 setLoading(false);
                 return;
             }
+            if (activeTab === 'reports') {
+                try {
+                    const res = await adminApi.getContentReports({ status: reportStatusFilter, page: reportPage, limit: 20 });
+                    if (cancelled) return;
+                    setReports(res.data?.reports ?? []);
+                    const pag = res.data?.pagination;
+                    setReportPagination({ total: pag?.total ?? 0, page: pag?.page ?? 1, totalPages: pag?.totalPages ?? 1 });
+                } catch (e: any) {
+                    if (!cancelled) toast.error(e?.message ?? 'Không tải được danh sách báo cáo.');
+                    setReports([]);
+                } finally {
+                    if (!cancelled) setLoading(false);
+                }
+                return;
+            }
             try {
                 if (activeTab === 'lessons') {
                     const res = await adminApi.getContentLessons({ search });
                     if (cancelled) return;
                     setLessons(res.data?.lessons ?? []);
                 } else if (activeTab === 'comments') {
-                    const res = await adminApi.getContentComments({ search });
+                    const res = await adminApi.getContentComments({ search, page: commentPage, limit: 20 });
                     if (cancelled) return;
                     const list = (res.data?.comments ?? []).map((c) => ({
                         _id: c._id,
@@ -71,6 +103,7 @@ export function AdminContent() {
                         user: c.user,
                         content: c.content,
                         target: c.target,
+                        lessonTitle: c.lessonTitle ?? '—',
                         date: dateFormatter.format(new Date(c.date)),
                         status: c.status,
                         isReply: c.isReply,
@@ -78,6 +111,12 @@ export function AdminContent() {
                         repliesCount: c.repliesCount ?? 0,
                     }));
                     setComments(list);
+                    const pag = res.data?.pagination;
+                    setCommentPagination({
+                        total: pag?.total ?? 0,
+                        page: pag?.page ?? 1,
+                        totalPages: pag?.totalPages ?? 1,
+                    });
                     setCommentsError(null);
                 } else if (activeTab === 'reviews') {
                     const res = await adminApi.getContentReviews({ search });
@@ -108,7 +147,11 @@ export function AdminContent() {
         return () => {
             cancelled = true;
         };
-    }, [activeTab, search, dateFormatter]);
+    }, [activeTab, search, commentPage, reportStatusFilter, reportPage, dateFormatter]);
+
+    useEffect(() => {
+        if (activeTab === 'comments') setCommentPage(1);
+    }, [activeTab, search]);
 
     const toggleLessonStatus = (lessonId: string) => {
         adminApi
@@ -145,6 +188,35 @@ export function AdminContent() {
         }
     };
 
+    const dismissReport = (reportId: string) => {
+        adminApi
+            .resolveContentReport(reportId, { status: 'dismissed' })
+            .then(() => {
+                setReports((prev) => prev.filter((r) => r._id !== reportId));
+                toast.success('Đã bỏ qua báo cáo.');
+            })
+            .catch((err: any) => toast.error(err?.message ?? 'Không thể cập nhật.'));
+    };
+
+    const resolveReportAndDeleteComment = (reportId: string, discussionId: string | null) => {
+        if (!discussionId) {
+            adminApi.resolveContentReport(reportId, { status: 'resolved' }).then(() => {
+                setReports((prev) => prev.filter((r) => r._id !== reportId));
+                toast.success('Đã đánh dấu xử lý.');
+            }).catch((err: any) => toast.error(err?.message ?? 'Không thể cập nhật.'));
+            return;
+        }
+        if (!window.confirm('Xóa bình luận vi phạm và đánh dấu báo cáo đã xử lý?')) return;
+        adminApi
+            .deleteContentComment(discussionId)
+            .then(() => adminApi.resolveContentReport(reportId, { status: 'resolved' }))
+            .then(() => {
+                setReports((prev) => prev.filter((r) => r._id !== reportId));
+                toast.success('Đã xóa bình luận và đánh dấu đã xử lý.');
+            })
+            .catch((err: any) => toast.error(err?.message ?? 'Không thể xử lý.'));
+    };
+
     return (
         <div className="space-y-6">
             <div>
@@ -157,6 +229,7 @@ export function AdminContent() {
                 {[
                     { id: 'lessons', label: 'Bài giảng', icon: FileText },
                     { id: 'comments', label: 'Bình luận', icon: MessageSquareMore },
+                    { id: 'reports', label: 'Báo cáo bình luận', icon: Flag },
                     { id: 'reviews', label: 'Đánh giá khóa học', icon: Star },
                     { id: 'quizzes', label: 'Câu hỏi (Quiz)', icon: HelpCircle },
                 ].map((tab) => (
@@ -271,6 +344,30 @@ export function AdminContent() {
 
             {activeTab === 'comments' && (
                 <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="grid gap-4">
+                    {commentPagination.totalPages > 1 && (
+                        <div className="flex items-center justify-between text-sm text-muted-foreground">
+                            <span>Tổng {commentPagination.total} bình luận</span>
+                            <div className="flex items-center gap-2">
+                                <button
+                                    type="button"
+                                    onClick={() => setCommentPage((p) => Math.max(1, p - 1))}
+                                    disabled={commentPage <= 1 || loading}
+                                    className="p-2 rounded-lg border border-border hover:bg-muted disabled:opacity-50"
+                                >
+                                    <ChevronLeft className="w-4 h-4" />
+                                </button>
+                                <span>Trang {commentPage} / {commentPagination.totalPages}</span>
+                                <button
+                                    type="button"
+                                    onClick={() => setCommentPage((p) => Math.min(commentPagination.totalPages, p + 1))}
+                                    disabled={commentPage >= commentPagination.totalPages || loading}
+                                    className="p-2 rounded-lg border border-border hover:bg-muted disabled:opacity-50"
+                                >
+                                    <ChevronRight className="w-4 h-4" />
+                                </button>
+                            </div>
+                        </div>
+                    )}
                     {loading ? (
                         <div className="flex justify-center py-12">
                             <Loader2 className="w-10 h-10 text-primary animate-spin" />
@@ -301,9 +398,14 @@ export function AdminContent() {
                                             <span className={`text-[11px] px-2 py-0.5 rounded-full ${isReply ? 'bg-muted text-muted-foreground' : 'bg-primary/10 text-primary'}`}>
                                                 {isReply ? 'Trả lời' : 'Bài viết'}
                                             </span>
-                                            <span className="text-xs text-muted-foreground px-2 py-0.5 bg-muted rounded-full">
+                                            <span className="text-xs text-muted-foreground px-2 py-0.5 bg-muted rounded-full" title="Khóa học">
                                                 {comment.target}
                                             </span>
+                                            {comment.lessonTitle && comment.lessonTitle !== '—' && (
+                                                <span className="text-xs text-primary/90 px-2 py-0.5 bg-primary/10 rounded-full" title="Bài học">
+                                                    {comment.lessonTitle}
+                                                </span>
+                                            )}
                                             <span className="text-xs text-muted-foreground">{comment.date}</span>
                                         </div>
                                         <p className="text-sm">{comment.content}</p>
@@ -366,6 +468,97 @@ export function AdminContent() {
                                 </div>
                             );
                         })()
+                    )}
+                </motion.div>
+            )}
+
+            {activeTab === 'reports' && (
+                <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-4">
+                    <div className="flex flex-wrap items-center gap-4">
+                        <select
+                            value={reportStatusFilter}
+                            onChange={(e) => { setReportStatusFilter(e.target.value); setReportPage(1); }}
+                            className="px-3 py-2 border border-border rounded-lg bg-background text-sm"
+                        >
+                            <option value="pending">Chờ xử lý</option>
+                            <option value="resolved">Đã xử lý</option>
+                            <option value="dismissed">Đã bỏ qua</option>
+                            <option value="all">Tất cả</option>
+                        </select>
+                        {reportPagination.totalPages > 1 && (
+                            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                                <span>Tổng {reportPagination.total} báo cáo</span>
+                                <button type="button" onClick={() => setReportPage((p) => Math.max(1, p - 1))} disabled={reportPage <= 1 || loading} className="p-2 rounded-lg border border-border hover:bg-muted disabled:opacity-50">
+                                    <ChevronLeft className="w-4 h-4" />
+                                </button>
+                                <span>Trang {reportPage} / {reportPagination.totalPages}</span>
+                                <button type="button" onClick={() => setReportPage((p) => Math.min(reportPagination.totalPages, p + 1))} disabled={reportPage >= reportPagination.totalPages || loading} className="p-2 rounded-lg border border-border hover:bg-muted disabled:opacity-50">
+                                    <ChevronRight className="w-4 h-4" />
+                                </button>
+                            </div>
+                        )}
+                    </div>
+                    {loading ? (
+                        <div className="flex justify-center py-12">
+                            <Loader2 className="w-10 h-10 text-primary animate-spin" />
+                        </div>
+                    ) : reports.length === 0 ? (
+                        <div className="bg-card border border-border rounded-xl p-8 text-center text-muted-foreground">
+                            <Flag className="w-10 h-10 mx-auto mb-2 opacity-50" />
+                            <p className="font-medium text-foreground mb-1">Chưa có báo cáo nào</p>
+                            <p className="text-sm">Báo cáo xuất hiện khi người dùng bấm &quot;Báo cáo&quot; trên bình luận trong mục Hỏi đáp của trang học.</p>
+                        </div>
+                    ) : (
+                        <div className="space-y-3">
+                            {reports.map((r) => (
+                                <div key={r._id} className="bg-card border border-border rounded-xl p-4">
+                                    <div className="flex flex-wrap items-center gap-2 mb-2">
+                                        <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
+                                            r.status === 'pending' ? 'bg-amber-500/10 text-amber-600' :
+                                                r.status === 'resolved' ? 'bg-green-500/10 text-green-600' : 'bg-muted text-muted-foreground'
+                                        }`}>
+                                            {r.status === 'pending' ? 'Chờ xử lý' : r.status === 'resolved' ? 'Đã xử lý' : 'Đã bỏ qua'}
+                                        </span>
+                                        <span className="text-xs text-muted-foreground">Báo cáo bởi: {r.reportedBy}</span>
+                                        <span className="text-xs text-muted-foreground">{dateFormatter.format(new Date(r.reportedAt))}</span>
+                                        {r.resolvedBy && <span className="text-xs text-muted-foreground">Xử lý bởi: {r.resolvedBy}</span>}
+                                    </div>
+                                    {r.reason && <p className="text-sm text-muted-foreground mb-2">Lý do: {r.reason}</p>}
+                                    {r.discussion && (
+                                        <div className="bg-muted/40 rounded-lg p-3 mb-3 text-sm">
+                                            <p className="font-medium text-foreground mb-1">Nội dung bình luận:</p>
+                                            <p className="text-muted-foreground">{r.discussion.content}</p>
+                                            <div className="flex flex-wrap gap-2 mt-2 text-xs text-muted-foreground">
+                                                <span>Người đăng: {r.discussion.user}</span>
+                                                <span>Khóa: {r.discussion.courseTitle}</span>
+                                                {r.discussion.lessonTitle && <span>Bài: {r.discussion.lessonTitle}</span>}
+                                                {r.discussion.isReply && <span className="bg-muted px-1.5 py-0.5 rounded">Trả lời</span>}
+                                            </div>
+                                        </div>
+                                    )}
+                                    {r.status === 'pending' && (
+                                        <div className="flex gap-2">
+                                            <button
+                                                type="button"
+                                                onClick={() => resolveReportAndDeleteComment(r._id, r.discussionId)}
+                                                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm bg-primary/10 text-primary hover:bg-primary/20 rounded-lg"
+                                            >
+                                                <Trash2 className="w-4 h-4" />
+                                                Xóa bình luận & đánh dấu đã xử lý
+                                            </button>
+                                            <button
+                                                type="button"
+                                                onClick={() => dismissReport(r._id)}
+                                                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm border border-border hover:bg-muted rounded-lg"
+                                            >
+                                                <XCircle className="w-4 h-4" />
+                                                Bỏ qua báo cáo
+                                            </button>
+                                        </div>
+                                    )}
+                                </div>
+                            ))}
+                        </div>
                     )}
                 </motion.div>
             )}

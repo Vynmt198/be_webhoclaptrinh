@@ -50,6 +50,7 @@ export default function App() {
               <Route index element={<Home />} />
               <Route path="courses" element={<Courses />} />
               <Route path="courses/:id" element={<CourseDetail />} />
+              <Route path="courses/:id/learn" element={<Learn />} />
               <Route path="my-courses" element={<MyCourses />} />
               <Route path="account" element={<Account />} />
               <Route path="certificates" element={<Certificates />} />

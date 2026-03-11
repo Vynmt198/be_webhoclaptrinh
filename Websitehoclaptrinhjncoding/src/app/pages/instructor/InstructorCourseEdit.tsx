@@ -1,8 +1,8 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { motion } from 'motion/react';
-import { Loader2, Plus, Pencil, Trash2, ChevronUp, ChevronDown, Video, FileText, HelpCircle, ClipboardList, Users, X } from 'lucide-react';
-import { courseApi, categoryApi, lessonApi, uploadApi, instructorQuizApi, assignmentApi, type Category, type Lesson, type Assignment, type AssignmentSubmission } from '@/app/lib/api';
+import { Loader2, Plus, Pencil, Trash2, ChevronUp, ChevronDown, Video, FileText, HelpCircle, ClipboardList, Users, X, MessageSquareMore, Pin, Send, BookOpen } from 'lucide-react';
+import { courseApi, categoryApi, lessonApi, uploadApi, instructorQuizApi, assignmentApi, discussionApi, type Category, type Lesson, type Assignment, type AssignmentSubmission, type DiscussionPost } from '@/app/lib/api';
 import { toast } from 'sonner';
 import {
   Select,
@@ -76,6 +76,68 @@ export function InstructorCourseEdit() {
   });
   const [categoryModalOpen, setCategoryModalOpen] = useState(false);
   const [newCategory, setNewCategory] = useState({ name: '', description: '' });
+  const [discussionModalOpen, setDiscussionModalOpen] = useState(false);
+  const [discussions, setDiscussions] = useState<DiscussionPost[]>([]);
+  const [repliesByPostId, setRepliesByPostId] = useState<Record<string, DiscussionPost[]>>({});
+  const [loadingDiscussions, setLoadingDiscussions] = useState(false);
+  const [expandedPostIds, setExpandedPostIds] = useState<Set<string>>(new Set());
+  const [newPostContent, setNewPostContent] = useState('');
+  const [replyContentByPostId, setReplyContentByPostId] = useState<Record<string, string>>({});
+  const [sendingPost, setSendingPost] = useState(false);
+  const [sendingReplyId, setSendingReplyId] = useState<string | null>(null);
+  const [pinningId, setPinningId] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+
+  const handleImportQuizFile = (file: File | null) => {
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const text = String(e.target?.result || '');
+        const raw = JSON.parse(text);
+        if (!Array.isArray(raw)) {
+          throw new Error('File quiz phải chứa một mảng câu hỏi (JSON array).');
+        }
+        const mapped = raw
+          .map((item, idx) => {
+            const questionText = (item.questionText ?? item.question ?? '').toString().trim();
+            if (!questionText) return null;
+            const questionCode = (item.questionCode ?? item.code ?? '').toString();
+            const rawOptions = Array.isArray(item.options) ? item.options.map((o: unknown) => String(o)) : [];
+            const options = rawOptions.length ? rawOptions : ['', '', '', ''];
+            const rawIndex =
+              typeof item.correctIndex === 'number'
+                ? item.correctIndex
+                : typeof item.correctOptionIndex === 'number'
+                ? item.correctOptionIndex
+                : 0;
+            const correctIndex = Math.max(0, Math.min(rawIndex, options.length - 1));
+            return {
+              questionText,
+              questionCode,
+              options,
+              correctIndex,
+            };
+          })
+          .filter(Boolean) as { questionText: string; questionCode: string; options: string[]; correctIndex: number }[];
+
+        if (!mapped.length) {
+          throw new Error('Không tìm thấy câu hỏi hợp lệ trong file.');
+        }
+
+        setQuizForm((f) => ({ ...f, questions: mapped }));
+        toast.success(`Đã import ${mapped.length} câu hỏi từ file.`);
+      } catch (err) {
+        console.error(err);
+        toast.error(
+          err instanceof Error
+            ? err.message
+            : 'File không đúng định dạng. Vui lòng dùng JSON chứa mảng câu hỏi.'
+        );
+      }
+    };
+    reader.readAsText(file);
+  };
 
   useEffect(() => {
     categoryApi
@@ -356,10 +418,14 @@ export function InstructorCourseEdit() {
     } else {
       lessonApi
         .create(id, payload)
-        .then(() => {
+        .then((res) => {
+          const newLesson = res.data as Lesson;
           toast.success('Đã thêm bài học.');
           setLessonModalOpen(false);
           fetchLessons();
+          if (newLesson?._id && lessonForm.type === 'quiz') {
+            openQuizSetup(newLesson._id);
+          }
         })
         .catch((err: Error) => toast.error(err.message || 'Không thể thêm bài học.'))
         .finally(() => setSavingLesson(false));
@@ -428,6 +494,141 @@ export function InstructorCourseEdit() {
       })
       .finally(() => setLoadingQuiz(false));
   };
+
+  const loadDiscussions = useCallback(() => {
+    if (!id) return;
+    setLoadingDiscussions(true);
+    discussionApi
+      .getList(id, { limit: 50 })
+      .then((res) => setDiscussions(res.data?.discussions ?? []))
+      .catch((err: Error) => toast.error(err?.message || 'Không tải được hỏi đáp.'))
+      .finally(() => setLoadingDiscussions(false));
+  }, [id]);
+
+  const loadReplies = useCallback((postId: string) => {
+    if (!id) return;
+    discussionApi
+      .getReplies(id, postId, { limit: 100 })
+      .then((res) => {
+        setRepliesByPostId((prev) => ({ ...prev, [postId]: res.data?.replies ?? [] }));
+      })
+      .catch((err: Error) => toast.error(err?.message || 'Không tải được trả lời.'));
+  }, [id]);
+
+  useEffect(() => {
+    if (discussionModalOpen && id) loadDiscussions();
+  }, [discussionModalOpen, id, loadDiscussions]);
+
+  const handleExpandPost = (postId: string) => {
+    setExpandedPostIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(postId)) next.delete(postId);
+      else {
+        next.add(postId);
+        if (!repliesByPostId[postId]) loadReplies(postId);
+      }
+      return next;
+    });
+  };
+
+  const handleCreatePost = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!id || !newPostContent.trim()) return;
+    setSendingPost(true);
+    discussionApi
+      .create({ courseId: id, title: 'Thảo luận', content: newPostContent.trim() })
+      .then(() => {
+        setNewPostContent('');
+        loadDiscussions();
+        toast.success('Đã đăng bài.');
+      })
+      .catch((err: Error) => toast.error(err?.message || 'Không thể đăng bài.'))
+      .finally(() => setSendingPost(false));
+  };
+
+  const handleReply = (postId: string) => {
+    const content = (replyContentByPostId[postId] ?? '').trim();
+    if (!content) return;
+    setSendingReplyId(postId);
+    discussionApi
+      .reply(postId, { content, courseId: id ?? undefined })
+      .then(() => {
+        setReplyContentByPostId((prev) => ({ ...prev, [postId]: '' }));
+        loadReplies(postId);
+        loadDiscussions();
+        toast.success('Đã trả lời.');
+      })
+      .catch((err: Error) => toast.error(err?.message || 'Không thể gửi trả lời.'))
+      .finally(() => setSendingReplyId(null));
+  };
+
+  const handlePinPost = (postId: string) => {
+    setPinningId(postId);
+    discussionApi
+      .pin(postId)
+      .then(() => {
+        loadDiscussions();
+        toast.success('Đã cập nhật ghim.');
+      })
+      .catch((err: Error) => toast.error(err?.message || 'Không thể ghim.'))
+      .finally(() => setPinningId(null));
+  };
+
+  const handleDeleteDiscussion = (discussionId: string) => {
+    if (!window.confirm('Bạn có chắc muốn xóa bài viết/trả lời này?')) return;
+    setDeletingId(discussionId);
+    discussionApi
+      .delete(discussionId)
+      .then(() => {
+        loadDiscussions();
+        setRepliesByPostId((prev) => {
+          const next = { ...prev };
+          Object.keys(next).forEach((pid) => {
+            next[pid] = next[pid].filter((r) => r._id !== discussionId);
+          });
+          return next;
+        });
+        toast.success('Đã xóa.');
+      })
+      .catch((err: Error) => toast.error(err?.message || 'Không thể xóa.'))
+      .finally(() => setDeletingId(null));
+  };
+
+  const getDiscussionUserName = (p: DiscussionPost) =>
+    typeof p.userId === 'object' && p.userId?.fullName ? p.userId.fullName : '—';
+
+  const getLessonKey = (p: DiscussionPost): string => {
+    const lid = typeof p.lessonId === 'object' ? (p.lessonId as { _id?: string })?._id : p.lessonId;
+    return lid ?? 'none';
+  };
+  const getLessonTitle = (p: DiscussionPost): string => {
+    if (typeof p.lessonId === 'object' && p.lessonId?.title) return p.lessonId.title as string;
+    const lid = typeof p.lessonId === 'object' ? (p.lessonId as { _id?: string })?._id : p.lessonId;
+    if (lid) {
+      const lesson = lessons.find((l) => l._id === lid);
+      return lesson?.title ?? 'Bài học';
+    }
+    return 'Chung (không gắn bài học)';
+  };
+  const discussionsByLesson = (() => {
+    const map: Record<string, DiscussionPost[]> = {};
+    discussions.forEach((p) => {
+      const key = getLessonKey(p);
+      if (!map[key]) map[key] = [];
+      map[key].push(p);
+    });
+    const keys = Object.keys(map);
+    const sortedKeys = keys.filter((k) => k !== 'none').sort((a, b) => {
+      const idxA = lessons.findIndex((l) => l._id === a);
+      const idxB = lessons.findIndex((l) => l._id === b);
+      if (idxA >= 0 && idxB >= 0) return idxA - idxB;
+      if (idxA >= 0) return -1;
+      if (idxB >= 0) return 1;
+      return 0;
+    });
+    if (map['none']) sortedKeys.push('none');
+    return sortedKeys.map((key) => ({ key, posts: map[key], title: map[key][0] ? getLessonTitle(map[key][0]) : '—' }));
+  })();
 
   const handleSaveQuiz = (e: React.FormEvent) => {
     e.preventDefault();
@@ -726,13 +927,23 @@ export function InstructorCourseEdit() {
             Hủy
           </button>
           {id && (
-            <button
-              type="button"
-              onClick={() => navigate(`/courses/${id}`)}
-              className="px-6 py-2 text-muted-foreground hover:text-foreground transition-colors"
-            >
-              Xem chi tiết
-            </button>
+            <>
+              <button
+                type="button"
+                onClick={() => navigate(`/courses/${id}/learn`)}
+                className="px-6 py-2 bg-primary/10 text-primary hover:bg-primary/20 rounded-lg transition-colors font-medium flex items-center gap-2"
+              >
+                <BookOpen className="w-4 h-4" />
+                Xem trang học
+              </button>
+              <button
+                type="button"
+                onClick={() => navigate(`/courses/${id}`)}
+                className="px-6 py-2 text-muted-foreground hover:text-foreground transition-colors"
+              >
+                Xem chi tiết
+              </button>
+            </>
           )}
         </div>
       </motion.form>
@@ -827,6 +1038,30 @@ export function InstructorCourseEdit() {
             ))}
           </ul>
         )}
+      </motion.div>
+
+      <motion.div
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="space-y-4 bg-card border border-border rounded-xl p-6"
+      >
+        <div className="flex items-center justify-between">
+          <h2 className="text-xl font-bold flex items-center gap-2">
+            <MessageSquareMore className="w-5 h-5" />
+            Hỏi đáp khóa học
+          </h2>
+          <button
+            type="button"
+            onClick={() => setDiscussionModalOpen(true)}
+            className="inline-flex items-center gap-2 px-4 py-2 bg-primary/10 text-primary border border-primary/30 rounded-lg hover:bg-primary/20 text-sm font-medium"
+          >
+            <MessageSquareMore className="w-4 h-4" />
+            Xem &amp; trả lời hỏi đáp
+          </button>
+        </div>
+        <p className="text-sm text-muted-foreground">
+          Xem và trả lời câu hỏi của học viên trong mục Thảo luận. Bạn có thể ghim bài quan trọng hoặc xóa nội dung vi phạm.
+        </p>
       </motion.div>
 
       <motion.div
@@ -1177,20 +1412,47 @@ export function InstructorCourseEdit() {
                     </div>
                   </section>
                   <section>
-                    <div className="flex items-center justify-between mb-4">
-                      <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">Câu hỏi</h3>
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setQuizForm((f) => ({
-                            ...f,
-                            questions: [...f.questions, { questionText: '', questionCode: '', options: ['', '', '', ''], correctIndex: 0 }],
-                          }))
-                        }
-                        className="text-sm font-medium text-primary hover:underline flex items-center gap-1"
-                      >
-                        + Thêm câu hỏi
-                      </button>
+                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
+                      <div>
+                        <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
+                          Câu hỏi
+                        </h3>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          Bạn có thể thêm thủ công hoặc import nhanh từ file JSON.
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <label className="cursor-pointer text-xs sm:text-sm font-medium text-primary hover:underline">
+                          Nhập từ file (JSON)
+                          <input
+                            type="file"
+                            accept="application/json,.json"
+                            className="hidden"
+                            onChange={(e) => {
+                              const file = e.target.files?.[0] || null;
+                              if (file) {
+                                handleImportQuizFile(file);
+                                e.target.value = '';
+                              }
+                            }}
+                          />
+                        </label>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setQuizForm((f) => ({
+                              ...f,
+                              questions: [
+                                ...f.questions,
+                                { questionText: '', questionCode: '', options: ['', '', '', ''], correctIndex: 0 },
+                              ],
+                            }))
+                          }
+                          className="text-sm font-medium text-primary hover:underline flex items-center gap-1"
+                        >
+                          + Thêm câu hỏi
+                        </button>
+                      </div>
                     </div>
                     <div className="space-y-6">
                       {quizForm.questions.map((q, qIdx) => (
@@ -1291,6 +1553,158 @@ export function InstructorCourseEdit() {
                 </div>
               )}
             </form>
+          </motion.div>
+        </div>
+      )}
+
+      {discussionModalOpen && id && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4 sm:p-6">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.97 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="bg-card border border-border rounded-2xl max-w-2xl w-full max-h-[92vh] overflow-hidden flex flex-col shadow-2xl"
+          >
+            <div className="shrink-0 px-6 py-4 border-b border-border flex items-center justify-between">
+              <div>
+                <h2 className="text-xl font-bold flex items-center gap-2">
+                  <MessageSquareMore className="w-5 h-5" />
+                  Hỏi đáp khóa học
+                </h2>
+                <p className="text-sm text-muted-foreground mt-0.5">Xem và trả lời câu hỏi của học viên. Ghim bài quan trọng hoặc xóa nội dung vi phạm.</p>
+              </div>
+              <button type="button" onClick={() => setDiscussionModalOpen(false)} className="p-2 hover:bg-muted rounded-lg">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-6 space-y-4">
+              <form onSubmit={handleCreatePost} className="flex gap-2">
+                <input
+                  type="text"
+                  value={newPostContent}
+                  onChange={(e) => setNewPostContent(e.target.value)}
+                  placeholder="Đăng bài mới (câu hỏi hoặc thông báo)..."
+                  className="flex-1 px-4 py-2.5 border border-border rounded-lg focus:ring-2 focus:ring-primary/50 outline-none text-sm"
+                />
+                <button type="submit" disabled={sendingPost || !newPostContent.trim()} className="px-4 py-2.5 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 disabled:opacity-50 flex items-center gap-2 text-sm font-medium">
+                  {sendingPost ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+                  Đăng
+                </button>
+              </form>
+              {loadingDiscussions ? (
+                <div className="flex justify-center py-12">
+                  <Loader2 className="w-10 h-10 text-primary animate-spin" />
+                </div>
+              ) : discussions.length === 0 ? (
+                <p className="text-muted-foreground text-center py-8 text-sm">Chưa có bài viết nào. Học viên có thể đăng trong mục Hỏi đáp khi học khóa.</p>
+              ) : (
+                <div className="space-y-6">
+                  {discussionsByLesson.map(({ key: lessonKey, title: lessonTitle, posts: groupPosts }) => (
+                    <div key={lessonKey}>
+                      <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-3 flex items-center gap-2">
+                        <BookOpen className="w-4 h-4" />
+                        {lessonTitle}
+                      </h3>
+                      <ul className="space-y-4">
+                        {groupPosts.map((post) => (
+                          <li key={post._id} className="border border-border rounded-xl overflow-hidden bg-muted/10">
+                      <div className="p-4 flex justify-between gap-3">
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap mb-1">
+                            <span className="font-medium text-sm">{getDiscussionUserName(post)}</span>
+                            {post.isPinned && (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-primary/15 text-primary text-xs rounded-full">
+                                <Pin className="w-3 h-3" /> Đã ghim
+                              </span>
+                            )}
+                            <span className="text-xs text-muted-foreground">
+                              {post.createdAt ? new Date(post.createdAt).toLocaleString('vi-VN') : ''}
+                            </span>
+                          </div>
+                          <p className="text-sm whitespace-pre-wrap break-words">{post.title || post.content}</p>
+                          {post.title && <p className="text-sm text-muted-foreground mt-1 whitespace-pre-wrap break-words">{post.content}</p>}
+                          <div className="flex items-center gap-3 mt-2">
+                            <button
+                              type="button"
+                              onClick={() => handleExpandPost(post._id)}
+                              className="text-xs text-primary hover:underline"
+                            >
+                              {expandedPostIds.has(post._id) ? 'Ẩn' : 'Xem'} {(post.repliesCount ?? 0)} trả lời
+                            </button>
+                            {!post.parentId && (
+                              <button
+                                type="button"
+                                onClick={() => handlePinPost(post._id)}
+                                disabled={pinningId === post._id}
+                                className="text-xs text-muted-foreground hover:text-primary disabled:opacity-50 flex items-center gap-1"
+                              >
+                                {pinningId === post._id ? <Loader2 className="w-3 h-3 animate-spin" /> : <Pin className="w-3 h-3" />}
+                                {post.isPinned ? 'Bỏ ghim' : 'Ghim'}
+                              </button>
+                            )}
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteDiscussion(post._id)}
+                              disabled={deletingId === post._id}
+                              className="text-xs text-muted-foreground hover:text-destructive disabled:opacity-50 flex items-center gap-1"
+                            >
+                              {deletingId === post._id ? <Loader2 className="w-3 h-3 animate-spin" /> : <Trash2 className="w-3 h-3" />}
+                              Xóa
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                      {expandedPostIds.has(post._id) && (
+                        <div className="border-t border-border bg-muted/20 p-4 space-y-3">
+                          {(repliesByPostId[post._id] ?? []).map((reply) => (
+                            <div key={reply._id} className="pl-4 border-l-2 border-primary/30 py-2">
+                              <div className="flex justify-between gap-2">
+                                <div>
+                                  <span className="font-medium text-xs">{getDiscussionUserName(reply)}</span>
+                                  <span className="text-xs text-muted-foreground ml-2">
+                                    {reply.createdAt ? new Date(reply.createdAt).toLocaleString('vi-VN') : ''}
+                                  </span>
+                                  <p className="text-sm mt-0.5 whitespace-pre-wrap break-words">{reply.content}</p>
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() => handleDeleteDiscussion(reply._id)}
+                                  disabled={deletingId === reply._id}
+                                  className="p-1.5 text-muted-foreground hover:text-destructive rounded-lg"
+                                >
+                                  {deletingId === reply._id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
+                                </button>
+                              </div>
+                            </div>
+                          ))}
+                          <form
+                            onSubmit={(e) => {
+                              e.preventDefault();
+                              handleReply(post._id);
+                            }}
+                            className="flex gap-2 mt-2"
+                          >
+                            <input
+                              type="text"
+                              value={replyContentByPostId[post._id] ?? ''}
+                              onChange={(e) => setReplyContentByPostId((prev) => ({ ...prev, [post._id]: e.target.value }))}
+                              placeholder="Viết trả lời..."
+                              className="flex-1 px-3 py-2 border border-border rounded-lg text-sm focus:ring-2 focus:ring-primary/50 outline-none"
+                            />
+                            <button type="submit" disabled={sendingReplyId === post._id || !(replyContentByPostId[post._id] ?? '').trim()} className="px-3 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium disabled:opacity-50 flex items-center gap-1">
+                              {sendingReplyId === post._id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+                              Gửi
+                            </button>
+                          </form>
+                        </div>
+                      )}
+                    </li>
+                        ))}
+                      </ul>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           </motion.div>
         </div>
       )}

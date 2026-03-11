@@ -2,6 +2,7 @@ const mongoose = require('mongoose');
 const Lesson = require('../models/Lesson');
 const Progress = require('../models/Progress');
 const Discussion = require('../models/Discussion');
+const DiscussionReport = require('../models/DiscussionReport');
 const Review = require('../models/Review');
 
 /**
@@ -135,6 +136,7 @@ exports.listComments = async (req, res, next) => {
             Discussion.find(filter)
                 .populate('userId', 'fullName')
                 .populate('courseId', 'title')
+                .populate('lessonId', 'title order')
                 .sort({ createdAt: -1 })
                 .skip(skip)
                 .limit(limitNum)
@@ -148,6 +150,8 @@ exports.listComments = async (req, res, next) => {
             user: d.userId?.fullName ?? '—',
             content: d.content,
             target: d.courseId?.title ?? '—',
+            lessonId: d.lessonId?._id?.toString() ?? null,
+            lessonTitle: d.lessonId?.title ?? '—',
             date: d.createdAt,
             status: d.status,
             isReply: Boolean(d.parentId),
@@ -241,6 +245,107 @@ exports.listReviews = async (req, res, next) => {
                 reviews,
                 pagination: { total, page: pageNum, limit: limitNum, totalPages: Math.ceil(total / limitNum) },
             },
+        });
+    } catch (error) {
+        next(error);
+    }
+};
+
+/**
+ * @route GET /api/admin/content/reports
+ * @desc List reported discussions (báo cáo bình luận) for admin
+ */
+exports.listReports = async (req, res, next) => {
+    try {
+        const { status, page = 1, limit = 20 } = req.query;
+        const pageNum = Math.max(1, parseInt(page, 10) || 1);
+        const limitNum = Math.min(100, Math.max(1, parseInt(limit, 10) || 20));
+        const skip = (pageNum - 1) * limitNum;
+
+        const filter = {};
+        if (status && String(status).toLowerCase() !== 'all') {
+            filter.status = status;
+        }
+
+        const [items, total] = await Promise.all([
+            DiscussionReport.find(filter)
+                .populate({
+                    path: 'discussionId',
+                    populate: [
+                        { path: 'userId', select: 'fullName' },
+                        { path: 'courseId', select: 'title' },
+                        { path: 'lessonId', select: 'title' },
+                    ],
+                })
+                .populate('reportedBy', 'fullName email')
+                .populate('resolvedBy', 'fullName')
+                .sort({ createdAt: -1 })
+                .skip(skip)
+                .limit(limitNum)
+                .lean(),
+            DiscussionReport.countDocuments(filter),
+        ]);
+
+        const reports = items.map((r) => {
+            const disc = r.discussionId;
+            return {
+                _id: r._id,
+                discussionId: disc?._id?.toString() ?? null,
+                status: r.status,
+                reason: r.reason || null,
+                reportedAt: r.createdAt,
+                reportedBy: r.reportedBy?.fullName ?? '—',
+                resolvedAt: r.resolvedAt || null,
+                resolvedBy: r.resolvedBy?.fullName ?? null,
+                discussion: disc
+                    ? {
+                        content: disc.content,
+                        user: disc.userId?.fullName ?? '—',
+                        courseTitle: disc.courseId?.title ?? '—',
+                        lessonTitle: disc.lessonId?.title ?? '—',
+                        status: disc.status,
+                        isReply: Boolean(disc.parentId),
+                    }
+                    : null,
+            };
+        });
+
+        res.status(200).json({
+            success: true,
+            data: {
+                reports,
+                pagination: { total, page: pageNum, limit: limitNum, totalPages: Math.ceil(total / limitNum) },
+            },
+        });
+    } catch (error) {
+        next(error);
+    }
+};
+
+/**
+ * @route PATCH /api/admin/content/reports/:id
+ * @desc Resolve or dismiss a report (status: resolved | dismissed)
+ */
+exports.resolveReport = async (req, res, next) => {
+    try {
+        const reportId = req.params.id;
+        const { status } = req.body || {};
+        if (!['resolved', 'dismissed'].includes(status)) {
+            return res.status(400).json({ success: false, message: 'status must be resolved or dismissed.' });
+        }
+        const report = await DiscussionReport.findById(reportId);
+        if (!report) {
+            return res.status(404).json({ success: false, message: 'Report not found.' });
+        }
+        report.status = status;
+        report.resolvedAt = new Date();
+        report.resolvedBy = req.user._id;
+        await report.save();
+
+        res.status(200).json({
+            success: true,
+            data: { report: { _id: report._id, status: report.status } },
+            message: status === 'resolved' ? 'Đã xử lý báo cáo.' : 'Đã bỏ qua báo cáo.',
         });
     } catch (error) {
         next(error);
