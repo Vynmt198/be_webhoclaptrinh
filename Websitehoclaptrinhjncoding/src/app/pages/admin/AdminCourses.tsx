@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { motion } from 'motion/react';
-import { CheckCircle, XCircle, Search, Filter, Loader2, Power, PowerOff, Trash2 } from 'lucide-react';
+import { CheckCircle, XCircle, Search, Filter, Loader2, Power, PowerOff, Trash2, BookOpen } from 'lucide-react';
 import { toast } from 'sonner';
 import { adminCourseApi, courseApi, Course } from '@/app/lib/api';
 
@@ -180,6 +180,13 @@ export function AdminCourses() {
                       </td>
                       <td className="px-4 py-4 text-right">
                         <div className="flex items-center justify-end gap-2 flex-wrap">
+                          <Link
+                            to={`/courses/${course._id}/learn`}
+                            className="p-1.5 text-primary hover:bg-primary/10 rounded-lg transition-colors"
+                            title="Xem trang học (học thử, xem video & hỏi đáp, hỏi đáp theo bài)"
+                          >
+                            <BookOpen className="w-4 h-4" />
+                          </Link>
                           {course.status === 'pending' && (
                             <>
                               <button

@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { motion } from 'motion/react';
-import { Search, Filter, Loader2, Plus, Eye, Send, Trash2, Pencil } from 'lucide-react';
+import { Search, Filter, Loader2, Plus, Eye, Send, Trash2, Pencil, BookOpen } from 'lucide-react';
 import { toast } from 'sonner';
 import { instructorApi, courseApi, Course } from '@/app/lib/api';
 import {
@@ -113,7 +113,7 @@ export function InstructorCourses() {
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold mb-2">Khóa tôi dạy</h1>
+          <h1 className="text-3xl font-bold mb-2">Quản lý khóa học</h1>
           <p className="text-muted-foreground">
             Quản lý và chỉnh sửa các khóa học bạn đã tạo.
           </p>
@@ -231,6 +231,13 @@ export function InstructorCourses() {
                               <Trash2 className="w-4 h-4" />
                             </button>
                           )}
+                          <Link
+                            to={`/courses/${course._id}/learn`}
+                            className="p-2 text-primary hover:bg-primary/10 rounded-lg transition-colors"
+                            title="Xem trang học (học thử, xem video & hỏi đáp)"
+                          >
+                            <BookOpen className="w-4 h-4" />
+                          </Link>
                           <Link
                             to={`/courses/${course._id}`}
                             state={{ from: 'instructor-courses' }}

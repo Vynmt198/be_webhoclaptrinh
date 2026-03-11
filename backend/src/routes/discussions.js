@@ -9,6 +9,7 @@ const {
     pinDiscussion,
     deleteDiscussion,
     likeDiscussion,
+    reportDiscussion,
 } = require('../controllers/discussionController');
 
 const auth = require('../middleware/auth');
@@ -58,6 +59,13 @@ router.put('/:id/pin', auth, pinDiscussion);
  * @access  Private (auth)
  */
 router.post('/:id/like', auth, likeDiscussion);
+
+/**
+ * @route   POST /api/discussions/:id/report
+ * @desc    Report a discussion (spam, inappropriate) for admin review
+ * @access  Private (auth)
+ */
+router.post('/:id/report', auth, reportDiscussion);
 
 /**
  * @route   DELETE /api/discussions/:id

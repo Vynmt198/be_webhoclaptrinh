@@ -21,6 +21,12 @@ const discussionSchema = new mongoose.Schema(
             ref: 'Discussion',
             default: null, // null = post, set = reply
         },
+        /** Optional: post gắn với bài học cụ thể (chỉ post gốc, reply kế thừa) */
+        lessonId: {
+            type: mongoose.Schema.Types.ObjectId,
+            ref: 'Lesson',
+            default: null,
+        },
         title: {
             type: String,
             trim: true,
@@ -54,6 +60,7 @@ const discussionSchema = new mongoose.Schema(
 );
 
 discussionSchema.index({ courseId: 1, createdAt: -1 });
+discussionSchema.index({ courseId: 1, lessonId: 1, createdAt: -1 });
 discussionSchema.index({ userId: 1 });
 discussionSchema.index({ parentId: 1 });
 discussionSchema.index({ status: 1 });

@@ -18,6 +18,8 @@ const {
     listComments,
     deleteComment,
     listReviews,
+    listReports,
+    resolveReport,
 } = require('../controllers/adminContentController');
 const auth = require('../middleware/auth');
 const { isAdmin } = require('../middleware/roleCheck');
@@ -34,6 +36,8 @@ router.get('/content/lessons', listLessons);
 router.patch('/content/lessons/:id/visibility', toggleLessonVisibility);
 router.get('/content/comments', listComments);
 router.delete('/content/comments/:id', deleteComment);
+router.get('/content/reports', listReports);
+router.patch('/content/reports/:id', resolveReport);
 router.get('/content/reviews', listReviews);
 
 // @route   GET /api/admin/users

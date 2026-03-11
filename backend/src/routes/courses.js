@@ -7,7 +7,7 @@ const assignmentController = require('../controllers/assignmentController');
 const { getCourseReviews, getRatingSummary } = require('../controllers/reviewController');
 const auth = require('../middleware/auth');
 const optionalAuth = require('../middleware/optionalAuth');
-const { isCourseOwner, isInstructor, isEnrolled: isEnrolledRole } = require('../middleware/roleCheck');
+const { isCourseOwner, isInstructor, isEnrolled: isEnrolledRole, isEnrolledOrCourseInstructor } = require('../middleware/roleCheck');
 const isEnrolled = require('../middleware/isEnrolled');
 
 router.get('/', courseController.listCourses);
@@ -20,7 +20,7 @@ router.get('/:id/rating-summary', getRatingSummary);
 router.get('/:id/learn', auth, isEnrolled, learningController.getCourseLearningData);
 router.get('/:id/assignments', auth, assignmentController.listByCourse);
 router.post('/:id/assignments', auth, isCourseOwner('id'), assignmentController.create);
-router.get('/:id/my-assignment-submissions', auth, isEnrolledRole('id'), assignmentController.getMySubmissionsByCourse);
+router.get('/:id/my-assignment-submissions', auth, isEnrolledOrCourseInstructor('id'), assignmentController.getMySubmissionsByCourse);
 router.get('/:id', optionalAuth, courseController.getCourseById);
 router.post('/', auth, isInstructor, courseController.createCourse);
 router.put('/:id', auth, isCourseOwner('id'), courseController.updateCourse);

@@ -202,7 +202,7 @@ export function MyCourses() {
                           Xem chi tiết
                         </Link>
                         <Link
-                          to="/instructor/courses"
+                          to={`/instructor/courses/${course._id}/edit`}
                           className="flex-1 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors text-sm text-center flex items-center justify-center gap-1"
                         >
                           <Settings className="w-4 h-4" />

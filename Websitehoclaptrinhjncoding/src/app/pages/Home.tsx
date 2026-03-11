@@ -242,7 +242,7 @@ export function Home() {
             initial="initial"
             whileInView="animate"
             viewport={{ once: true }}
-            className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8"
+            className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 items-stretch"
           >
             {featuredCourses.map((course, index) => (
               <motion.div
@@ -250,12 +250,13 @@ export function Home() {
                 variants={fadeInUp}
                 whileHover={{ y: -8 }}
                 transition={{ duration: 0.3 }}
+                className="h-full"
               >
                 <Link
                   to={`/courses/${course._id}`}
-                  className="group block bg-card border border-border hover:border-primary/50 rounded-xl overflow-hidden transition-all shadow-lg hover:shadow-xl hover:shadow-primary/10"
+                  className="group h-full flex flex-col bg-card border border-border hover:border-primary/50 rounded-xl overflow-hidden transition-all shadow-lg hover:shadow-xl hover:shadow-primary/10"
                 >
-                  <div className="relative overflow-hidden aspect-video">
+                  <div className="relative overflow-hidden aspect-video shrink-0">
                     <img
                       src={
                         course.thumbnail ||
@@ -270,8 +271,8 @@ export function Home() {
                     </div>
                   </div>
 
-                  <div className="p-6">
-                    <div className="flex items-center justify-between mb-3">
+                  <div className="p-6 flex-1 flex flex-col min-h-0">
+                    <div className="flex items-center justify-between mb-3 shrink-0">
                       <span className="text-sm text-primary font-medium">
                         {course.categoryId?.name || course.category || 'Lập trình'}
                       </span>
@@ -286,15 +287,15 @@ export function Home() {
                       </div>
                     </div>
 
-                    <h3 className="text-xl font-semibold mb-2 group-hover:text-primary transition-colors line-clamp-2">
+                    <h3 className="text-xl font-semibold mb-2 group-hover:text-primary transition-colors line-clamp-2 min-h-[3.5rem]">
                       {course.title}
                     </h3>
 
-                    <p className="text-sm text-muted-foreground mb-4 line-clamp-2">
+                    <p className="text-sm text-muted-foreground mb-4 line-clamp-2 min-h-[2.5rem]">
                       {course.description || 'Khóa học thực chiến giúp bạn nâng cao kỹ năng lập trình qua dự án thực tế.'}
                     </p>
 
-                    <div className="flex items-center justify-between pt-4 border-t border-border">
+                    <div className="flex items-center justify-between pt-4 border-t border-border mt-auto shrink-0">
                       <div className="flex items-center space-x-4 text-sm text-muted-foreground">
                         <span>{course.totalLessons ?? course.lessons ?? 0} bài học</span>
                         <span>{course.duration ?? 'Tùy khóa học'}</span>

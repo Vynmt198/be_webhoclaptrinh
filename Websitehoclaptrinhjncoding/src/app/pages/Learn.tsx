@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState, useCallback, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   ArrowLeft,
@@ -82,6 +83,12 @@ export function Learn() {
   const [replyingTo, setReplyingTo] = useState<DiscussionPost | null>(null);
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
   const [expandedRepliesPostIds, setExpandedRepliesPostIds] = useState<Set<string>>(new Set());
+  const [repliesByPostId, setRepliesByPostId] = useState<Record<string, DiscussionPost[]>>({});
+  const [loadingRepliesPostId, setLoadingRepliesPostId] = useState<string | null>(null);
+  const [menuAnchor, setMenuAnchor] = useState<{ postId: string; top: number; right: number } | null>(null);
+  const [reportTarget, setReportTarget] = useState<DiscussionPost | null>(null);
+  const [reportReason, setReportReason] = useState('');
+  const [reportSubmitting, setReportSubmitting] = useState(false);
   const chatMessagesEndRef = useRef<HTMLDivElement>(null);
   const chatInputRef = useRef<HTMLInputElement>(null);
 
@@ -174,38 +181,36 @@ useEffect(() => {
 
 // ================= DISCUSSION CHAT =================
 
-const loadChatRoom = useCallback(() => {
+const loadChatRoom = useCallback((lessonId: string | null) => {
   if (!id) return;
 
   setLoadingChat(true);
+  const params = lessonId ? { lessonId, limit: 50 } : { limit: 1 };
 
   discussionApi
-    .getList(id, { limit: 1 })
+    .getList(id, params)
     .then((res) => {
       const list = res.data?.discussions ?? [];
-      const room = list[0] ?? null;
-
-      setChatRoomPost(room);
-
-      if (!room) {
-        setChatMessages([]);
-        setLoadingChat(false);
-        return;
+      if (!lessonId) {
+        const room = list[0] ?? null;
+        setChatRoomPost(room);
+        if (!room) {
+          setChatMessages([]);
+          setLoadingChat(false);
+          return;
+        }
+        return discussionApi
+          .getReplies(id, room._id, { limit: 200 })
+          .then((repliesRes) => {
+            const replies = repliesRes.data?.replies ?? [];
+            const sorted = [room, ...replies].sort(
+              (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+            );
+            setChatMessages(sorted);
+          });
       }
-
-      return discussionApi
-        .getReplies(id, room._id, { limit: 200 })
-        .then((repliesRes) => {
-          const replies = repliesRes.data?.replies ?? [];
-
-          const sorted = [room, ...replies].sort(
-            (a, b) =>
-              new Date(a.createdAt).getTime() -
-              new Date(b.createdAt).getTime()
-          );
-
-          setChatMessages(sorted);
-        });
+      setChatRoomPost(null);
+      setChatMessages(list);
     })
     .catch(() => {
       setChatRoomPost(null);
@@ -216,16 +221,33 @@ const loadChatRoom = useCallback(() => {
 
 useEffect(() => {
   if (!id || !discussionModalOpen) return;
-  loadChatRoom();
-}, [id, discussionModalOpen, loadChatRoom]);
+  loadChatRoom(currentLessonId);
+}, [id, discussionModalOpen, currentLessonId, loadChatRoom]);
 
 useEffect(() => {
   if (!discussionModalOpen) {
     setOpenMenuId(null);
+    setMenuAnchor(null);
     setReplyingTo(null);
+    setReportTarget(null);
+    setReportReason('');
     setExpandedRepliesPostIds(new Set());
+    setRepliesByPostId({});
+    setLoadingRepliesPostId(null);
   }
 }, [discussionModalOpen]);
+
+const loadRepliesForPost = useCallback((postId: string) => {
+  if (!id) return;
+  setLoadingRepliesPostId(postId);
+  discussionApi
+    .getReplies(id, postId, { limit: 200 })
+    .then((res) => {
+      setRepliesByPostId((prev) => ({ ...prev, [postId]: res.data?.replies ?? [] }));
+    })
+    .catch(() => setRepliesByPostId((prev) => ({ ...prev, [postId]: [] })))
+    .finally(() => setLoadingRepliesPostId(null));
+}, [id]);
 
 useEffect(() => {
   chatMessagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -312,6 +334,11 @@ const getMessageUserId = (m: DiscussionPost): string =>
     ? m.userId._id
     : (m.userId as string);
 
+const canReportComment = (msg: DiscussionPost): boolean => {
+  if (!user) return false;
+  return getMessageUserId(msg) !== user._id;
+};
+
 const canDeleteComment = (msg: DiscussionPost): boolean => {
   if (!user) return false;
 
@@ -339,9 +366,24 @@ const handleCopyComment = (msg: DiscussionPost) => {
   setOpenMenuId(null);
 };
 
-const handleReportComment = () => {
-  toast.info('Báo cáo đã gửi. Admin sẽ xem xét.');
+const handleReportComment = (msg: DiscussionPost) => {
+  setReportTarget(msg);
+  setMenuAnchor(null);
   setOpenMenuId(null);
+};
+
+const handleReportSubmit = () => {
+  if (!reportTarget) return;
+  setReportSubmitting(true);
+  discussionApi
+    .report(reportTarget._id, { reason: reportReason.trim() || undefined })
+    .then(() => {
+      toast.success('Báo cáo đã gửi. Admin sẽ xem xét.');
+      setReportTarget(null);
+      setReportReason('');
+    })
+    .catch((err: unknown) => toast.error(err instanceof Error ? err.message : 'Không gửi được báo cáo.'))
+    .finally(() => setReportSubmitting(false));
 };
 
 const handleDeleteComment = (msg: DiscussionPost) => {
@@ -377,15 +419,25 @@ const handleSendChat = (e: React.FormEvent) => {
   setSendingChat(true);
 
   const doSend = () => {
-    if (chatRoomPost) {
+    if (replyingTo) {
+      const rootId = replyingTo.parentId ?? replyingTo._id;
+      return discussionApi
+        .reply(rootId, { content, courseId: id })
+        .then(() => {
+          setChatInput('');
+          setReplyingTo(null);
+          loadChatRoom(currentLessonId);
+          loadRepliesForPost(rootId);
+          toast.success('Đã gửi.');
+        });
+    }
+    if (chatRoomPost && !currentLessonId) {
       return discussionApi
         .reply(chatRoomPost._id, { content, courseId: id })
         .then(() => {
           setChatInput('');
           setReplyingTo(null);
-
-          loadChatRoom();
-
+          loadChatRoom(currentLessonId);
           toast.success('Đã gửi.');
         });
     }
@@ -395,15 +447,12 @@ const handleSendChat = (e: React.FormEvent) => {
         courseId: id,
         title: 'Thảo luận',
         content,
+        lessonId: currentLessonId ?? undefined,
       })
-      .then((res) => {
-        setChatRoomPost(res.data?.discussion ?? null);
-
+      .then(() => {
         setChatInput('');
         setReplyingTo(null);
-
-        loadChatRoom();
-
+        loadChatRoom(currentLessonId);
         toast.success('Đã gửi.');
       });
   };
@@ -1166,8 +1215,8 @@ useEffect(() => {
                   {(quizData.questions ?? []).map((q: QuizQuestion, idx: number) => (
                     <div key={idx} className="space-y-3">
                       {q.questionCode?.trim() ? (
-                        <div className="rounded-xl bg-sky-100 dark:bg-sky-900/30 border border-sky-200 dark:border-sky-800 p-4">
-                          <pre className="text-sm font-mono text-foreground whitespace-pre-wrap overflow-x-auto">
+                        <div className="rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-600 p-4">
+                          <pre className="text-sm font-mono text-slate-800 dark:text-slate-100 whitespace-pre-wrap overflow-x-auto">
                             <code>{q.questionCode.trim()}</code>
                           </pre>
                         </div>
@@ -1220,13 +1269,18 @@ useEffect(() => {
         </div>
       )}
 
-      {/* Modal Hỏi đáp - Giao diện bình luận */}
+      {/* Modal Hỏi đáp - Giao diện bình luận (theo bài học khi đang xem lesson) */}
       {discussionModalOpen && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
-          <div className="bg-card border border-border rounded-xl max-w-2xl w-full max-h-[90vh] flex flex-col shadow-xl overflow-hidden">
+          <div className="bg-card border border-border rounded-xl max-w-3xl w-full max-h-[92vh] flex flex-col shadow-xl overflow-hidden">
             {/* Đầu: avatar + ô nhập + nút đóng */}
             <div className="p-4 border-b border-border shrink-0">
               <div className="flex items-center gap-3">
+                {currentLessonId && state?.lessons && (
+                  <p className="text-xs text-muted-foreground w-full -mb-1">
+                    Hỏi đáp tại bài: <span className="font-medium text-foreground">{state.lessons.find((l) => l._id === currentLessonId)?.title ?? '—'}</span>
+                  </p>
+                )}
                 <div className="w-10 h-10 rounded-full bg-primary/20 text-primary flex items-center justify-center text-sm font-medium shrink-0">
                   {user?.fullName
                     ? (user.fullName.trim().split(/\s+/).length >= 2
@@ -1270,7 +1324,7 @@ useEffect(() => {
             </div>
 
             {/* Danh sách bình luận */}
-            <div className="flex-1 overflow-y-auto p-4 min-h-0">
+            <div className="flex-1 overflow-y-auto p-4 min-h-0 min-h-[50vh]">
               {loadingChat ? (
                 <div className="flex justify-center py-12">
                   <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />
@@ -1279,21 +1333,31 @@ useEffect(() => {
                 <p className="text-sm text-muted-foreground text-center py-8">Chưa có bình luận. Hãy viết bình luận đầu tiên.</p>
               ) : (
                 (() => {
-                  const roots = chatMessages.filter((m) => !m.parentId);
+                  const isLessonScope = Boolean(currentLessonId);
+                  const roots = isLessonScope
+                    ? chatMessages
+                    : chatMessages.filter((m) => !m.parentId);
                   const repliesByParent: Record<string, DiscussionPost[]> = {};
-                  chatMessages.filter((m) => m.parentId).forEach((r) => {
-                    const pid = r.parentId!;
-                    if (!repliesByParent[pid]) repliesByParent[pid] = [];
-                    repliesByParent[pid].push(r);
-                  });
+                  if (!isLessonScope) {
+                    chatMessages.filter((m) => m.parentId).forEach((r) => {
+                      const pid = r.parentId!;
+                      if (!repliesByParent[pid]) repliesByParent[pid] = [];
+                      repliesByParent[pid].push(r);
+                    });
+                  }
                   const toggleReplies = (postId: string) => {
                     setExpandedRepliesPostIds((prev) => {
                       const next = new Set(prev);
                       if (next.has(postId)) next.delete(postId);
-                      else next.add(postId);
+                      else {
+                        next.add(postId);
+                        if (isLessonScope) loadRepliesForPost(postId);
+                      }
                       return next;
                     });
                   };
+                  const getRepliesForPost = (postId: string) =>
+                    isLessonScope ? (repliesByPostId[postId] ?? []) : (repliesByParent[postId] ?? []);
                   const renderItem = (msg: DiscussionPost, isReply: boolean) => {
                     const isInstructor = state?.courseInstructorId && getMessageUserId(msg) === state.courseInstructorId;
                     const avatarUrl = userAvatar(msg.userId);
@@ -1328,21 +1392,23 @@ useEffect(() => {
                               Phản hồi
                             </button>
                             <div className="relative ml-auto">
-                              <button type="button" onClick={() => setOpenMenuId(openMenuId === msg._id ? null : msg._id)} className="p-1 text-muted-foreground hover:text-foreground rounded" title="Tùy chọn">
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  if (openMenuId === msg._id) {
+                                    setOpenMenuId(null);
+                                    setMenuAnchor(null);
+                                  } else {
+                                    const rect = e.currentTarget.getBoundingClientRect();
+                                    setMenuAnchor({ postId: msg._id, top: rect.bottom + 4, right: window.innerWidth - rect.right });
+                                    setOpenMenuId(msg._id);
+                                  }
+                                }}
+                                className="p-1 text-muted-foreground hover:text-foreground rounded"
+                                title="Tùy chọn"
+                              >
                                 ⋯
                               </button>
-                              {openMenuId === msg._id && (
-                                <>
-                                  <div className="fixed inset-0 z-10" aria-hidden onClick={() => setOpenMenuId(null)} />
-                                  <div className="absolute right-0 top-full mt-1 py-1 min-w-[140px] bg-card border border-border rounded-lg shadow-lg z-20">
-                                    <button type="button" onClick={() => handleCopyComment(msg)} className="w-full px-3 py-2 text-left text-sm hover:bg-muted">Sao chép</button>
-                                    <button type="button" onClick={handleReportComment} className="w-full px-3 py-2 text-left text-sm hover:bg-muted">Báo cáo</button>
-                                    {canDeleteComment(msg) && (
-                                      <button type="button" onClick={() => handleDeleteComment(msg)} className="w-full px-3 py-2 text-left text-sm hover:bg-muted text-destructive">Xóa</button>
-                                    )}
-                                  </div>
-                                </>
-                              )}
                             </div>
                           </div>
                         </div>
@@ -1352,12 +1418,13 @@ useEffect(() => {
                   return (
                     <ul className="space-y-6">
                       {roots.map((post) => {
-                        const replies = repliesByParent[post._id] ?? [];
+                        const replies = getRepliesForPost(post._id);
                         const expanded = expandedRepliesPostIds.has(post._id);
+                        const loadingReplies = isLessonScope && expanded && loadingRepliesPostId === post._id;
                         return (
                           <li key={post._id} className="space-y-2">
                             {renderItem(post, false)}
-                            {replies.length > 0 && (
+                            {(replies.length > 0 || isLessonScope) && (
                               <>
                                 <button
                                   type="button"
@@ -1365,9 +1432,10 @@ useEffect(() => {
                                   className="flex items-center gap-1.5 text-[11px] text-primary hover:underline ml-10"
                                 >
                                   {expanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
-                                  {expanded ? 'Ẩn trả lời' : `Xem ${replies.length} trả lời`}
+                                  {expanded ? (replies.length > 0 ? `Ẩn ${replies.length} trả lời` : 'Ẩn trả lời') : (replies.length > 0 ? `Xem ${replies.length} trả lời` : 'Xem trả lời')}
                                 </button>
-                                {expanded && replies.map((r) => renderItem(r, true))}
+                                {loadingReplies && <p className="text-xs text-muted-foreground ml-10 py-1">Đang tải phản hồi...</p>}
+                                {expanded && !loadingReplies && replies.length > 0 && replies.map((r) => renderItem(r, true))}
                               </>
                             )}
                           </li>
@@ -1382,6 +1450,80 @@ useEffect(() => {
           </div>
         </div>
       )}
+
+      {/* Modal báo cáo bình luận */}
+      {reportTarget && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[60] p-4">
+          <div className="bg-card border border-border rounded-xl max-w-md w-full p-6 shadow-xl">
+            <h3 className="text-lg font-semibold mb-2">Báo cáo bình luận</h3>
+            <p className="text-sm text-muted-foreground mb-3">
+              Bạn đang báo cáo bình luận này cho quản trị viên. (Tùy chọn) Nêu lý do bên dưới:
+            </p>
+            <textarea
+              value={reportReason}
+              onChange={(e) => setReportReason(e.target.value)}
+              placeholder="Ví dụ: spam, nội dung không phù hợp..."
+              rows={3}
+              className="w-full px-3 py-2 border border-border rounded-lg bg-background text-sm resize-none mb-4"
+            />
+            <div className="flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => { setReportTarget(null); setReportReason(''); }}
+                className="px-4 py-2 border border-border rounded-lg hover:bg-muted"
+              >
+                Hủy
+              </button>
+              <button
+                type="button"
+                disabled={reportSubmitting}
+                onClick={handleReportSubmit}
+                className="px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 disabled:opacity-50"
+              >
+                {reportSubmitting ? 'Đang gửi...' : 'Gửi báo cáo'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Portal: context menu cho bình luận (tránh bị cắt bởi modal) */}
+      {menuAnchor && (() => {
+        const msg =
+          chatMessages.find((m) => m._id === menuAnchor!.postId) ||
+          Object.values(repliesByPostId)
+            .flat()
+            .find((m) => m._id === menuAnchor!.postId);
+        if (!msg) return null;
+        const closeMenu = () => {
+          setOpenMenuId(null);
+          setMenuAnchor(null);
+        };
+        return createPortal(
+          <>
+            <div className="fixed inset-0 z-[100]" aria-hidden onClick={closeMenu} />
+            <div
+              className="fixed z-[101] py-1 min-w-[160px] bg-card border border-border rounded-lg shadow-xl"
+              style={{ top: menuAnchor.top, right: menuAnchor.right }}
+            >
+              <button type="button" onClick={() => { handleCopyComment(msg); closeMenu(); }} className="w-full px-3 py-2 text-left text-sm hover:bg-muted">
+                Sao chép
+              </button>
+              {canReportComment(msg) && (
+                <button type="button" onClick={() => { handleReportComment(msg); closeMenu(); }} className="w-full px-3 py-2 text-left text-sm hover:bg-muted">
+                  Báo cáo
+                </button>
+              )}
+              {canDeleteComment(msg) && (
+                <button type="button" onClick={() => { handleDeleteComment(msg); closeMenu(); }} className="w-full px-3 py-2 text-left text-sm hover:bg-muted text-destructive">
+                  Xóa
+                </button>
+              )}
+            </div>
+          </>,
+          document.body
+        );
+      })()}
     </div>
   );
 }
