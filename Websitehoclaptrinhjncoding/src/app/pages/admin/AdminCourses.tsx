@@ -59,13 +59,16 @@ export function AdminCourses() {
       .catch((err: Error) => toast.error(err.message || 'Không thể xóa.'));
   };
 
-  const filteredCourses = courses.filter((c) => {
-    const matchesSearch =
-      !search.trim() ||
-      c.title.toLowerCase().includes(search.toLowerCase()) ||
-      (c.instructorId?.fullName || '').toLowerCase().includes(search.toLowerCase());
-    return matchesSearch;
-  });
+  const filteredCourses = courses
+    // Không hiển thị các khóa ở trạng thái "Nháp"
+    .filter((c) => (c.status || '').toLowerCase() !== 'draft')
+    .filter((c) => {
+      const matchesSearch =
+        !search.trim() ||
+        c.title.toLowerCase().includes(search.toLowerCase()) ||
+        (c.instructorId?.fullName || '').toLowerCase().includes(search.toLowerCase());
+      return matchesSearch;
+    });
 
   const StatusBadge = ({ status }: { status?: string }) => {
     const s = (status || '').toLowerCase();
@@ -125,7 +128,6 @@ export function AdminCourses() {
             className="pl-9 pr-8 py-2 border border-border bg-background rounded-lg focus:ring-2 focus:ring-primary/50 outline-none appearance-none"
           >
             <option value="pending">Chờ duyệt</option>
-            <option value="draft">Nháp</option>
             <option value="active">Đã duyệt</option>
             <option value="rejected">Đã từ chối</option>
             <option value="disabled">Đã tắt</option>
