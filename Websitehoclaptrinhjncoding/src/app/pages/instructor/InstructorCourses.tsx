@@ -205,13 +205,15 @@ export function InstructorCourses() {
                       </td>
                       <td className="px-4 py-4 text-right">
                         <div className="flex items-center justify-end gap-2">
-                          <Link
-                            to={`/instructor/courses/${course._id}/edit`}
-                            className="p-2 text-blue-500 hover:bg-blue-500/10 rounded-lg transition-colors"
-                            title="Chỉnh sửa (nội dung, bài học, quiz)"
-                          >
-                            <Pencil className="w-4 h-4" />
-                          </Link>
+                          {course.status !== 'rejected' && (
+                            <Link
+                              to={`/instructor/courses/${course._id}/edit`}
+                              className="p-2 text-blue-500 hover:bg-blue-500/10 rounded-lg transition-colors"
+                              title="Chỉnh sửa (nội dung, bài học, quiz)"
+                            >
+                              <Pencil className="w-4 h-4" />
+                            </Link>
+                          )}
                           {course.status === 'draft' && (
                             <button
                               onClick={() => handleSubmitForReview(course._id)}
