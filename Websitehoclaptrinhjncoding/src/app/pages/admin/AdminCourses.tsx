@@ -184,6 +184,7 @@ export function AdminCourses() {
                         <div className="flex items-center justify-end gap-2 flex-wrap">
                           <Link
                             to={`/courses/${course._id}/learn`}
+                            state={{ from: 'admin-courses' }}
                             className="p-1.5 text-primary hover:bg-primary/10 rounded-lg transition-colors"
                             title="Xem trang học (học thử, xem video & hỏi đáp, hỏi đáp theo bài)"
                           >

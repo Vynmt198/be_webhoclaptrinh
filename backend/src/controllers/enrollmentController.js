@@ -1,6 +1,7 @@
 const Enrollment = require('../models/Enrollment');
 const Lesson = require('../models/Lesson');
 const Progress = require('../models/Progress');
+const Course = require('../models/Course');
 const mongoose = require('mongoose');
 
 /**
@@ -61,6 +62,72 @@ exports.getMyEnrollments = async (req, res, next) => {
         res.status(200).json({
             success: true,
             data: { enrollments: enrollmentsWithProgress },
+        });
+    } catch (error) {
+        next(error);
+    }
+};
+
+/**
+ * @route POST /api/enrollments/free
+ * @desc Enroll current user into free courses (price = 0) without payment.
+ * Body: { courseIds: string[] }
+ */
+exports.enrollFreeCourses = async (req, res, next) => {
+    try {
+        const userId = req.user._id;
+        const { courseIds } = req.body || {};
+
+        if (!Array.isArray(courseIds) || courseIds.length === 0) {
+            return res.status(400).json({ success: false, message: 'courseIds is required (non-empty array).' });
+        }
+
+        const uniqueIds = Array.from(new Set(courseIds.map((x) => String(x)).filter(Boolean)));
+        const courseObjIds = uniqueIds
+            .filter((id) => mongoose.Types.ObjectId.isValid(id))
+            .map((id) => new mongoose.Types.ObjectId(id));
+
+        if (courseObjIds.length === 0) {
+            return res.status(400).json({ success: false, message: 'No valid courseIds provided.' });
+        }
+
+        const courses = await Course.find({
+            _id: { $in: courseObjIds },
+            status: 'active',
+            price: 0,
+        }).select('_id').lean();
+
+        const freeCourseIds = new Set(courses.map((c) => c._id.toString()));
+
+        const results = await Promise.all(
+            courseObjIds.map(async (cid) => {
+                const courseIdStr = cid.toString();
+                if (!freeCourseIds.has(courseIdStr)) {
+                    return { courseId: courseIdStr, ok: false, reason: 'not_free_or_not_active' };
+                }
+
+                // Upsert enrollment: if exists, set to active; if new, create active and increment count.
+                const existing = await Enrollment.findOne({ userId, courseId: cid }).select('_id status').lean();
+                if (!existing) {
+                    await Enrollment.create({ userId, courseId: cid, status: 'active' });
+                    await Course.findByIdAndUpdate(cid, { $inc: { enrollmentCount: 1 } });
+                    return { courseId: courseIdStr, ok: true, action: 'created' };
+                }
+
+                if (existing.status === 'active') {
+                    return { courseId: courseIdStr, ok: true, action: 'already_active' };
+                }
+
+                await Enrollment.updateOne({ _id: existing._id }, { $set: { status: 'active' } });
+                return { courseId: courseIdStr, ok: true, action: 'reactivated' };
+            })
+        );
+
+        return res.status(200).json({
+            success: true,
+            data: {
+                results,
+            },
         });
     } catch (error) {
         next(error);

@@ -105,3 +105,39 @@ exports.getCourseProgress = async (req, res, next) => {
         next(error);
     }
 };
+
+/**
+ * @route GET /api/progress/monthly-time
+ * @desc Get total timeSpent (seconds) for current month
+ */
+exports.getMonthlyTimeSpent = async (req, res, next) => {
+    try {
+        const now = new Date();
+        const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0);
+        const startOfNextMonth = new Date(now.getFullYear(), now.getMonth() + 1, 1, 0, 0, 0, 0);
+
+        const rows = await Progress.aggregate([
+            {
+                $match: {
+                    userId: req.user._id,
+                    updatedAt: { $gte: startOfMonth, $lt: startOfNextMonth },
+                },
+            },
+            {
+                $group: {
+                    _id: null,
+                    totalSeconds: { $sum: { $ifNull: ['$timeSpent', 0] } },
+                },
+            },
+        ]);
+
+        const totalSeconds = rows?.[0]?.totalSeconds ?? 0;
+
+        return res.status(200).json({
+            success: true,
+            data: { totalSeconds },
+        });
+    } catch (error) {
+        next(error);
+    }
+};

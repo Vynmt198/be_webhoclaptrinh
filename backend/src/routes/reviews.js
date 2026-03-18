@@ -9,7 +9,7 @@ const {
 } = require('../controllers/reviewController');
 
 const auth = require('../middleware/auth');
-const { isEnrolled, isReviewOwner, isReviewOwnerOrAdmin } = require('../middleware/roleCheck');
+const { isEnrolled, isReviewOwner } = require('../middleware/roleCheck');
 const { validateCreateReview, validateUpdateReview } = require('../utils/validators');
 
 /**
@@ -296,6 +296,7 @@ router.put('/:id', auth, isReviewOwner, validateUpdateReview, updateReview);
  *       404:
  *         description: Review not found
  */
-router.delete('/:id', auth, isReviewOwnerOrAdmin, deleteReview);
+// Only the review owner can delete (admin cannot)
+router.delete('/:id', auth, isReviewOwner, deleteReview);
 
 module.exports = router;

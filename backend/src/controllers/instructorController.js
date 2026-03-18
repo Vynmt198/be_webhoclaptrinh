@@ -57,23 +57,27 @@ exports.getCourseAnalytics = async (req, res, next) => {
 
         const courseIdObj = new mongoose.Types.ObjectId(courseId);
 
-        const [totalEnrollments, totalLessons, lessonDurationAgg, progressStats] = await Promise.all([
+        const [enrollments, totalEnrollments, totalLessons, lessonDurationAgg] = await Promise.all([
+            Enrollment.find({ courseId: courseIdObj, status: 'active' }).select('userId').lean(),
             Enrollment.countDocuments({ courseId: courseIdObj, status: 'active' }),
             Lesson.countDocuments({ courseId: courseIdObj }),
             Lesson.aggregate([
                 { $match: { courseId: courseIdObj } },
                 { $group: { _id: null, totalDurationSeconds: { $sum: '$duration' } } },
             ]),
-            Progress.aggregate([
-                { $match: { courseId: courseIdObj } },
-                {
-                    $group: {
-                        _id: null,
-                        totalTimeSpent: { $sum: '$timeSpent' },
-                        completedLessons: { $sum: { $cond: ['$isCompleted', 1, 0] } },
-                    },
+        ]);
+
+        const enrolledUserIds = enrollments.map((e) => e.userId).filter(Boolean);
+
+        const progressStats = await Progress.aggregate([
+            { $match: { courseId: courseIdObj, userId: { $in: enrolledUserIds } } },
+            {
+                $group: {
+                    _id: null,
+                    totalTimeSpent: { $sum: '$timeSpent' },
+                    completedLessons: { $sum: { $cond: ['$isCompleted', 1, 0] } },
                 },
-            ]),
+            },
         ]);
 
         const stats = progressStats.length > 0 ? progressStats[0] : { totalTimeSpent: 0, completedLessons: 0 };

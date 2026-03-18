@@ -231,11 +231,11 @@ const deleteReview = async (req, res, next) => {
             });
         }
 
-        // Check authorization: owner or admin (BR22)
-        if (review.userId.toString() !== userId.toString() && userRole !== 'admin') {
+        // Check authorization: owner only (admin cannot delete)
+        if (review.userId.toString() !== userId.toString()) {
             return res.status(403).json({
                 success: false,
-                message: 'You can only delete your own review or an admin can delete any review.',
+                message: 'You can only delete your own review.',
             });
         }
 

@@ -3,7 +3,7 @@ import { motion } from 'motion/react';
 import { User, BookOpen, Award, Settings, Bell, Loader2, Eye, EyeOff } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAuth } from '@/app/context/AuthContext';
-import { userApi, certificateApi, type Certificate } from '@/app/lib/api';
+import { enrollmentApi, userApi, certificateApi, type Certificate, type EnrollmentWithCourse } from '@/app/lib/api';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 
 export function Account() {
@@ -17,6 +17,13 @@ export function Account() {
   const [certLoading, setCertLoading] = useState(false);
   const [certificates, setCertificates] = useState<Certificate[]>([]);
   const [certLoaded, setCertLoaded] = useState(false);
+
+  const [enrolledCoursesLoading, setEnrolledCoursesLoading] = useState(false);
+  const [enrolledCourses, setEnrolledCourses] = useState<EnrollmentWithCourse[]>([]);
+  const [enrolledCoursesLoaded, setEnrolledCoursesLoaded] = useState(false);
+
+  const [emailNotiEnabled, setEmailNotiEnabled] = useState<boolean>(user?.emailNotificationsEnabled ?? true);
+  const [isSavingSettings, setIsSavingSettings] = useState(false);
 
   // Profile form state
   const [profileForm, setProfileForm] = useState({
@@ -46,7 +53,23 @@ export function Account() {
       instructorYoutube: user.instructorYoutube ?? '',
       instructorLinkedin: user.instructorLinkedin ?? '',
     }));
-  }, [user?._id, user?.fullName, user?.instructorHeadline, user?.instructorBio, user?.instructorSkills, user?.instructorWebsite, user?.instructorFacebook, user?.instructorYoutube, user?.instructorLinkedin]);
+    setEmailNotiEnabled(user.emailNotificationsEnabled ?? true);
+  }, [user?._id, user?.fullName, user?.instructorHeadline, user?.instructorBio, user?.instructorSkills, user?.instructorWebsite, user?.instructorFacebook, user?.instructorYoutube, user?.instructorLinkedin, user?.emailNotificationsEnabled]);
+
+  const handleToggleEmailNotifications = async (nextValue: boolean) => {
+    setEmailNotiEnabled(nextValue);
+    setIsSavingSettings(true);
+    try {
+      const res = await userApi.updateProfile({ emailNotificationsEnabled: nextValue });
+      updateUser(res.data.user);
+      toast.success('Đã cập nhật cài đặt thông báo.');
+    } catch (err: unknown) {
+      setEmailNotiEnabled(user?.emailNotificationsEnabled ?? true);
+      toast.error(err instanceof Error ? err.message : 'Không thể cập nhật cài đặt.');
+    } finally {
+      setIsSavingSettings(false);
+    }
+  };
 
   // Password form state
   const [passwordForm, setPasswordForm] = useState({
@@ -215,6 +238,20 @@ export function Account() {
                             toast.error(err instanceof Error ? err.message : 'Không thể tải chứng chỉ.');
                           })
                           .finally(() => setCertLoading(false));
+                      }
+
+                      if (tab.id === 'courses' && !enrolledCoursesLoaded && !enrolledCoursesLoading) {
+                        setEnrolledCoursesLoading(true);
+                        enrollmentApi
+                          .getMyEnrollments()
+                          .then((res) => {
+                            setEnrolledCourses(res.data?.enrollments ?? []);
+                            setEnrolledCoursesLoaded(true);
+                          })
+                          .catch((err: unknown) => {
+                            toast.error(err instanceof Error ? err.message : 'Không thể tải danh sách khóa học.');
+                          })
+                          .finally(() => setEnrolledCoursesLoading(false));
                       }
                     }}
                     className={`w-full flex items-center space-x-3 px-4 py-3 rounded-lg transition-all ${activeTab === tab.id
@@ -529,26 +566,49 @@ export function Account() {
 
     {/* ── Courses Tab ── */}
     {activeTab === 'courses' && (
-                <div>
-                  <h2 className="text-2xl font-bold mb-6">Khóa học đã đăng ký</h2>
-                  <div className="grid gap-4">
-                    {[1, 2, 3].map((item) => (
-                      <div
-                        key={item}
-                        className="flex items-center space-x-4 p-4 border border-border rounded-lg hover:border-primary/50 transition-all"
-                      >
-                        <div className="w-20 h-14 bg-primary/10 rounded flex-shrink-0" />
-                        <div className="flex-1">
-                          <h3 className="font-semibold mb-1">React & TypeScript</h3>
-                          <p className="text-sm text-muted-foreground">Tiến độ: 75%</p>
-                        </div>
-                        <button className="px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors">
-                          Tiếp tục
-                        </button>
-              </div>
-            ))}
+      <div>
+        <h2 className="text-2xl font-bold mb-6">Khóa học đã đăng ký</h2>
+
+        {enrolledCoursesLoading ? (
+          <p className="text-sm text-muted-foreground">Đang tải khóa học...</p>
+        ) : enrolledCourses.length === 0 ? (
+          <p className="text-sm text-muted-foreground">Bạn chưa đăng ký khóa học nào.</p>
+        ) : (
+          <div className="grid gap-4">
+            {enrolledCourses.map((e) => {
+              const course = e.courseId;
+              const thumb =
+                course?.thumbnail ||
+                'https://images.unsplash.com/photo-1516321318423-f06f85e504b3?w=800';
+              const progress = e.progress ?? 0;
+              return (
+                <div
+                  key={e._id}
+                  className="flex items-center space-x-4 p-4 border border-border rounded-lg hover:border-primary/50 transition-all"
+                >
+                  <img
+                    src={thumb}
+                    alt={course?.title || 'Khóa học'}
+                    className="w-20 h-14 rounded object-cover flex-shrink-0"
+                  />
+                  <div className="flex-1 min-w-0">
+                    <h3 className="font-semibold mb-1 line-clamp-1">{course?.title || 'Khóa học'}</h3>
+                    <p className="text-sm text-muted-foreground">Tiến độ: {progress}%</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => navigate(`/learn/${course?._id}`)}
+                    className="px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors"
+                    disabled={!course?._id}
+                  >
+                    Tiếp tục
+                  </button>
+                </div>
+              );
+            })}
           </div>
-        </div>
+        )}
+      </div>
       )}
 
     {/* ── Settings Tab ── */}
@@ -565,7 +625,13 @@ export function Account() {
                         </div>
                       </div>
                       <label className="relative inline-flex items-center cursor-pointer">
-                        <input type="checkbox" className="sr-only peer" defaultChecked />
+                        <input
+                          type="checkbox"
+                          className="sr-only peer"
+                          checked={emailNotiEnabled}
+                          onChange={(e) => handleToggleEmailNotifications(e.target.checked)}
+                          disabled={isSavingSettings}
+                        />
                         <div className="w-11 h-6 bg-muted peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-primary/50 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary"></div>
                       </label>
                 </div>

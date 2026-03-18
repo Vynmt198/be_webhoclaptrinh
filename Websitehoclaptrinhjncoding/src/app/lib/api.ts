@@ -72,13 +72,6 @@ export const authApi = {
     forgotPassword: (email: string) =>
         request('/auth/forgot-password', { method: 'POST', body: { email } }),
 
-    /** Verify OTP/token before allowing new password step */
-    verifyResetOtp: (token: string) =>
-        request<{ success: boolean; message?: string }>('/auth/verify-reset-otp', {
-            method: 'POST',
-            body: { token },
-        }),
-
     resetPassword: (token: string, newPassword: string) =>
         request('/auth/reset-password', {
             method: 'POST',
@@ -117,6 +110,7 @@ export const userApi = {
     updateProfile: (payload: {
         fullName?: string;
         avatar?: string;
+        emailNotificationsEnabled?: boolean;
         // Instructor profile (optional)
         instructorHeadline?: string;
         instructorBio?: string;
@@ -288,6 +282,7 @@ export const adminApi = {
             };
         }>(`/admin/content/reviews${query ? `?${query}` : ''}`);
     },
+
 };
 
 // ─── Shared Types ──────────────────────────────────────────────────────────
@@ -299,6 +294,7 @@ export interface User {
     role: 'learner' | 'instructor' | 'admin';
     isActive: boolean;
     avatar?: string;
+    emailNotificationsEnabled?: boolean;
     // Instructor profile (optional)
     instructorHeadline?: string;
     instructorBio?: string;
@@ -519,8 +515,7 @@ export const discussionApi = {
         }),
     like: (postId: string) =>
         request<{ success: boolean; data: { likesCount: number } }>(`/discussions/${postId}/like`, { method: 'POST' }),
-    unlike: (postId: string) =>
-        request<{ success: boolean; data: { likesCount: number } }>(`/discussions/${postId}/unlike`, { method: 'POST' }),
+
     pin: (postId: string) =>
         request<{ success: boolean; data: { discussion: DiscussionPost } }>(`/discussions/${postId}/pin`, { method: 'PUT' }),
     delete: (id: string) =>
@@ -581,6 +576,8 @@ export const progressApi = {
             method: 'PUT',
             body: payload as Record<string, unknown>,
         }),
+    getMonthlyTimeSpent: () =>
+        request<{ success: boolean; data: { totalSeconds: number } }>('/progress/monthly-time'),
 };
 
 // Lesson content for learner view (includes full content/videoUrl)
@@ -624,6 +621,11 @@ export interface EnrollmentWithCourse {
 export const enrollmentApi = {
     getMyEnrollments: () =>
         request<{ success: boolean; data: { enrollments: EnrollmentWithCourse[] } }>('/enrollments'),
+    enrollFreeCourses: (courseIds: string[]) =>
+        request<{ success: boolean; data: { results: { courseId: string; ok: boolean; action?: string; reason?: string }[] } }>(
+            '/enrollments/free',
+            { method: 'POST', body: { courseIds } as Record<string, unknown> }
+        ),
 };
 
 export interface QuizQuestion {

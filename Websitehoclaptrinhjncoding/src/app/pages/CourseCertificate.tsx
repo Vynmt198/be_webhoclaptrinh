@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { Award, ArrowLeft } from 'lucide-react';
 import { certificateApi, type Certificate } from '@/app/lib/api';
 import { toast } from 'sonner';
@@ -11,8 +11,24 @@ interface CourseCertificateData {
 export function CourseCertificate() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const location = useLocation();
   const [loading, setLoading] = useState(true);
   const [data, setData] = useState<CourseCertificateData>({ certificate: null });
+  const fromState = (location.state as { from?: string } | null)?.from;
+  const backPath =
+    fromState === 'certificates'
+      ? '/certificates'
+      : fromState === 'my-courses'
+      ? '/my-courses'
+      : id
+      ? `/learn/${id}`
+      : '/certificates';
+  const backLabel =
+    fromState === 'certificates'
+      ? 'Quay lại chứng chỉ'
+      : fromState === 'my-courses'
+      ? 'Quay lại khóa học của tôi'
+      : 'Quay lại khóa học';
 
   useEffect(() => {
     const load = async () => {
@@ -57,10 +73,10 @@ export function CourseCertificate() {
           <h1 className="text-2xl font-bold">Chưa có chứng chỉ cho khóa học này</h1>
           <button
             type="button"
-            onClick={() => navigate('/my-courses')}
+            onClick={() => navigate(backPath)}
             className="px-5 py-2.5 rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 text-sm font-medium"
           >
-            Quay lại khóa học của tôi
+            {backLabel}
           </button>
         </div>
       </div>
@@ -75,11 +91,11 @@ export function CourseCertificate() {
         <div className="flex items-center justify-between px-6 py-4 border-b border-border bg-muted/40">
           <button
             type="button"
-            onClick={() => navigate(`/learn/${id}`)}
+            onClick={() => navigate(backPath)}
             className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground"
           >
             <ArrowLeft className="w-4 h-4" />
-            <span>Quay lại khóa học</span>
+            <span>{backLabel}</span>
           </button>
           <span className="text-xs text-muted-foreground">Mã chứng chỉ: {cert.certificateId}</span>
         </div>

@@ -51,7 +51,7 @@ export function InstructorCourseEdit() {
     maxScore: 100,
     dueDate: '',
     lessonId: '',
-    type: 'regular' as 'regular' | 'exam',
+    type: 'exam' as 'exam',
     timeLimitMinutes: '' as string | '',
     passingScorePercent: 60 as number,
     questionsJson: '',
@@ -194,7 +194,9 @@ export function InstructorCourseEdit() {
     setLoadingAssignments(true);
     assignmentApi
       .listByCourse(id)
-      .then((res: { data?: { assignments?: Assignment[] } }) => setAssignments(res.data?.assignments ?? []))
+      .then((res: { data?: { assignments?: Assignment[] } }) =>
+        setAssignments((res.data?.assignments ?? []).filter((a) => a.type === 'exam'))
+      )
       .catch(() => setAssignments([]))
       .finally(() => setLoadingAssignments(false));
   }, [id]);
@@ -211,7 +213,7 @@ export function InstructorCourseEdit() {
       maxScore: 100,
       dueDate: '',
       lessonId: '',
-      type: 'regular',
+      type: 'exam',
       timeLimitMinutes: '',
       passingScorePercent: 60,
       questionsJson: '',
@@ -227,7 +229,7 @@ export function InstructorCourseEdit() {
       maxScore: a.maxScore ?? 100,
       dueDate: a.dueDate ? a.dueDate.slice(0, 10) : '',
       lessonId: typeof a.lessonId === 'object' && a.lessonId?._id ? a.lessonId._id : '',
-      type: a.type ?? 'regular',
+      type: 'exam',
       timeLimitMinutes: a.timeLimitMinutes != null ? String(a.timeLimitMinutes) : '',
       passingScorePercent: a.passingScorePercent ?? 60,
       questionsJson: a.questions ? JSON.stringify(a.questions, null, 2) : '',
@@ -243,7 +245,7 @@ export function InstructorCourseEdit() {
     }
     setSavingAssignment(true);
     let parsedQuestions: unknown = undefined;
-    if (assignmentForm.type === 'exam' && assignmentForm.questionsJson.trim()) {
+    if (assignmentForm.questionsJson.trim()) {
       try {
         parsedQuestions = JSON.parse(assignmentForm.questionsJson);
       } catch {
@@ -258,16 +260,14 @@ export function InstructorCourseEdit() {
       maxScore: assignmentForm.maxScore || 100,
       dueDate: assignmentForm.dueDate || undefined,
       lessonId: assignmentForm.lessonId || undefined,
-      type: assignmentForm.type,
+      type: 'exam',
     };
-    if (assignmentForm.type === 'exam') {
-      payload.timeLimitMinutes = assignmentForm.timeLimitMinutes
-        ? Number(assignmentForm.timeLimitMinutes)
-        : undefined;
-      payload.passingScorePercent = assignmentForm.passingScorePercent ?? 60;
-      if (parsedQuestions) {
-        payload.questions = parsedQuestions;
-      }
+    payload.timeLimitMinutes = assignmentForm.timeLimitMinutes
+      ? Number(assignmentForm.timeLimitMinutes)
+      : undefined;
+    payload.passingScorePercent = assignmentForm.passingScorePercent ?? 60;
+    if (parsedQuestions) {
+      payload.questions = parsedQuestions;
     }
     if (editingAssignmentId) {
       assignmentApi
@@ -362,6 +362,7 @@ export function InstructorCourseEdit() {
       videoUrl: '',
       content: '',
       resources: '',
+      // duration input is in minutes (backend stores seconds)
       duration: 0,
       isPreview: false,
     });
@@ -380,7 +381,8 @@ export function InstructorCourseEdit() {
           videoUrl: l.videoUrl || '',
           content: l.content || '',
           resources: l.resources || '',
-          duration: l.duration || 0,
+          // Convert seconds -> minutes for UI
+          duration: l.duration ? Math.round((l.duration / 60) * 10) / 10 : 0,
           isPreview: l.isPreview || false,
         });
         setLessonModalOpen(true);
@@ -396,13 +398,15 @@ export function InstructorCourseEdit() {
       return;
     }
     setSavingLesson(true);
+    const durationMinutes = Number(lessonForm.duration) || 0;
+    const durationSeconds = Math.max(0, Math.round(durationMinutes * 60));
     const payload = {
       title: lessonForm.title.trim(),
       type: lessonForm.type,
       videoUrl: lessonForm.type === 'video' ? lessonForm.videoUrl : undefined,
       content: lessonForm.type === 'text' ? lessonForm.content : undefined,
       resources: lessonForm.resources || undefined,
-      duration: lessonForm.duration || 0,
+      duration: durationSeconds,
       isPreview: lessonForm.isPreview,
     };
     if (editingLessonId) {
@@ -1072,7 +1076,7 @@ export function InstructorCourseEdit() {
         <div className="flex items-center justify-between">
           <h2 className="text-xl font-bold flex items-center gap-2">
             <ClipboardList className="w-5 h-5" />
-            Bài tập (Assignments)
+            Bài thi cuối khóa (Trắc nghiệm)
           </h2>
           <button
             type="button"
@@ -1080,18 +1084,18 @@ export function InstructorCourseEdit() {
             className="inline-flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 text-sm font-medium"
           >
             <Plus className="w-4 h-4" />
-            Thêm bài tập
+            Thêm bài thi
           </button>
         </div>
         <p className="text-sm text-muted-foreground">
-          Học viên cần pass hết quiz trong khóa mới được nộp bài tập. Chấm đạt bài tập thì mới đủ điều kiện nhận chứng chỉ.
+          Học viên cần pass hết quiz trong khóa để mở khóa làm bài thi cuối khóa. Đạt bài thi thì mới đủ điều kiện nhận chứng chỉ.
         </p>
         {loadingAssignments ? (
           <div className="flex justify-center py-8">
             <Loader2 className="w-8 h-8 text-primary animate-spin" />
           </div>
         ) : assignments.length === 0 ? (
-          <p className="text-muted-foreground py-4">Chưa có bài tập. Nhấn &quot;Thêm bài tập&quot; để tạo.</p>
+          <p className="text-muted-foreground py-4">Chưa có bài thi. Nhấn &quot;Thêm bài thi&quot; để tạo.</p>
         ) : (
           <ul className="space-y-2">
             {assignments.map((a) => (
@@ -1179,13 +1183,14 @@ export function InstructorCourseEdit() {
                     </Select>
                   </div>
                   <div>
-                    <label className="block text-sm font-medium mb-2">Thời lượng (giây)</label>
+                    <label className="block text-sm font-medium mb-2">Thời lượng (phút)</label>
                     <input
                       type="number"
                       min={0}
+                      step={0.5}
                       value={lessonForm.duration || ''}
                       onChange={(e) =>
-                        setLessonForm((f) => ({ ...f, duration: parseInt(e.target.value, 10) || 0 }))
+                        setLessonForm((f) => ({ ...f, duration: parseFloat(e.target.value) || 0 }))
                       }
                       placeholder="0"
                       className="w-full px-4 py-3 border border-border rounded-xl focus:ring-2 focus:ring-primary/50 outline-none"
@@ -1718,20 +1723,20 @@ export function InstructorCourseEdit() {
           >
             <div className="sticky top-0 z-10 bg-card border-b border-border px-8 py-5">
               <h2 className="text-xl font-bold">
-                {editingAssignmentId ? 'Chỉnh sửa bài tập' : 'Thêm bài tập'}
+                {editingAssignmentId ? 'Chỉnh sửa bài thi' : 'Thêm bài thi'}
               </h2>
-              <p className="text-sm text-muted-foreground mt-0.5">Học viên cần pass hết quiz mới được nộp bài tập</p>
+              <p className="text-sm text-muted-foreground mt-0.5">Học viên cần pass hết quiz để mở khóa làm bài thi</p>
             </div>
             <form onSubmit={handleSaveAssignment} className="p-8 space-y-6">
               <section className="space-y-4">
-                <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">Thông tin bài tập</h3>
+                <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">Thông tin bài thi</h3>
                 <div>
-                  <label className="block text-sm font-medium mb-2">Tên bài tập *</label>
+                  <label className="block text-sm font-medium mb-2">Tên bài thi *</label>
                   <input
                     type="text"
                     value={assignmentForm.title}
                     onChange={(e) => setAssignmentForm((f) => ({ ...f, title: e.target.value }))}
-                    placeholder="VD: Bài tập tuần 1 - Làm form đăng ký"
+                    placeholder="VD: Bài thi cuối khóa"
                     className="w-full px-4 py-3 border border-border rounded-xl focus:ring-2 focus:ring-primary/50 outline-none"
                   />
                 </div>
@@ -1747,108 +1752,82 @@ export function InstructorCourseEdit() {
                 </div>
               </section>
               <section className="space-y-3">
-                <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">Loại bài tập</h3>
-                <div className="flex flex-wrap gap-3">
-                  <button
-                    type="button"
-                    onClick={() => setAssignmentForm((f) => ({ ...f, type: 'regular' }))}
-                    className={`px-3 py-1.5 rounded-full text-xs font-medium border ${
-                      assignmentForm.type === 'regular'
-                        ? 'bg-primary text-primary-foreground border-primary'
-                        : 'border-border text-muted-foreground hover:bg-muted'
-                    }`}
-                  >
-                    Bài tập thường
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setAssignmentForm((f) => ({ ...f, type: 'exam' }))}
-                    className={`px-3 py-1.5 rounded-full text-xs font-medium border ${
-                      assignmentForm.type === 'exam'
-                        ? 'bg-primary text-primary-foreground border-primary'
-                        : 'border-border text-muted-foreground hover:bg-muted'
-                    }`}
-                  >
-                    Bài thi cuối khóa (trắc nghiệm)
-                  </button>
-                </div>
-                {assignmentForm.type === 'exam' && (
-                  <div className="mt-2 space-y-4 rounded-2xl border border-dashed border-primary/40 bg-primary/5 p-4">
-                    <p className="text-xs text-muted-foreground">
-                      Thiết lập bài thi trắc nghiệm cho cuối khóa. Có thể nhập JSON câu hỏi thủ công hoặc import từ file.
-                    </p>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                      <div>
-                        <label className="block text-sm font-medium mb-1">Thời gian làm bài (phút)</label>
-                        <input
-                          type="number"
-                          min={1}
-                          value={assignmentForm.timeLimitMinutes}
-                          onChange={(e) =>
-                            setAssignmentForm((f) => ({ ...f, timeLimitMinutes: e.target.value }))
-                          }
-                          placeholder="VD: 60"
-                          className="w-full px-3 py-2 border border-border rounded-lg focus:ring-2 focus:ring-primary/50 outline-none text-sm"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium mb-1">Điểm đạt tối thiểu (%)</label>
-                        <input
-                          type="number"
-                          min={1}
-                          max={100}
-                          value={assignmentForm.passingScorePercent}
-                          onChange={(e) =>
-                            setAssignmentForm((f) => ({
-                              ...f,
-                              passingScorePercent: parseInt(e.target.value, 10) || 60,
-                            }))
-                          }
-                          className="w-full px-3 py-2 border border-border rounded-lg focus:ring-2 focus:ring-primary/50 outline-none text-sm"
-                        />
-                      </div>
-                    </div>
-                    <div className="space-y-2">
-                      <div className="flex items-center justify-between gap-2">
-                        <label className="block text-sm font-medium">Câu hỏi trắc nghiệm (JSON)</label>
-                        <label className="text-xs text-primary hover:underline cursor-pointer">
-                          Import từ file JSON
-                          <input
-                            type="file"
-                            accept="application/json"
-                            className="hidden"
-                            onChange={(e) => {
-                              const file = e.target.files?.[0];
-                              if (!file) return;
-                              const reader = new FileReader();
-                              reader.onload = () => {
-                                try {
-                                  const text = String(reader.result || '');
-                                  JSON.parse(text);
-                                  setAssignmentForm((f) => ({ ...f, questionsJson: text }));
-                                  toast.success('Đã import file câu hỏi.');
-                                } catch {
-                                  toast.error('File JSON không hợp lệ.');
-                                }
-                              };
-                              reader.readAsText(file, 'utf-8');
-                              e.target.value = '';
-                            }}
-                          />
-                        </label>
-                      </div>
-                      <textarea
-                        value={assignmentForm.questionsJson}
+                <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">Bài thi trắc nghiệm cuối khóa</h3>
+                <div className="mt-2 space-y-4 rounded-2xl border border-dashed border-primary/40 bg-primary/5 p-4">
+                  <p className="text-xs text-muted-foreground">
+                    Thiết lập bài thi trắc nghiệm cho cuối khóa. Có thể nhập JSON câu hỏi thủ công hoặc import từ file.
+                  </p>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium mb-1">Thời gian làm bài (phút)</label>
+                      <input
+                        type="number"
+                        min={1}
+                        value={assignmentForm.timeLimitMinutes}
                         onChange={(e) =>
-                          setAssignmentForm((f) => ({ ...f, questionsJson: e.target.value }))
+                          setAssignmentForm((f) => ({ ...f, timeLimitMinutes: e.target.value }))
                         }
-                        rows={8}
-                        className="w-full px-3 py-2 border border-border rounded-lg focus:ring-2 focus:ring-primary/50 outline-none text-xs font-mono bg-background"
-                        placeholder='[{"questionText":"...","options":["A","B","C","D"],"correctIndex":0,"points":1}]'
+                        placeholder="VD: 60"
+                        className="w-full px-3 py-2 border border-border rounded-lg focus:ring-2 focus:ring-primary/50 outline-none text-sm"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium mb-1">Điểm đạt tối thiểu (%)</label>
+                      <input
+                        type="number"
+                        min={1}
+                        max={100}
+                        value={assignmentForm.passingScorePercent}
+                        onChange={(e) =>
+                          setAssignmentForm((f) => ({
+                            ...f,
+                            passingScorePercent: parseInt(e.target.value, 10) || 60,
+                          }))
+                        }
+                        className="w-full px-3 py-2 border border-border rounded-lg focus:ring-2 focus:ring-primary/50 outline-none text-sm"
                       />
                     </div>
                   </div>
-                )}
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between gap-2">
+                      <label className="block text-sm font-medium">Câu hỏi trắc nghiệm (JSON)</label>
+                      <label className="text-xs text-primary hover:underline cursor-pointer">
+                        Import từ file JSON
+                        <input
+                          type="file"
+                          accept="application/json"
+                          className="hidden"
+                          onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            if (!file) return;
+                            const reader = new FileReader();
+                            reader.onload = () => {
+                              try {
+                                const text = String(reader.result || '');
+                                JSON.parse(text);
+                                setAssignmentForm((f) => ({ ...f, questionsJson: text }));
+                                toast.success('Đã import file câu hỏi.');
+                              } catch {
+                                toast.error('File JSON không hợp lệ.');
+                              }
+                            };
+                            reader.readAsText(file, 'utf-8');
+                            e.target.value = '';
+                          }}
+                        />
+                      </label>
+                    </div>
+                    <textarea
+                      value={assignmentForm.questionsJson}
+                      onChange={(e) =>
+                        setAssignmentForm((f) => ({ ...f, questionsJson: e.target.value }))
+                      }
+                      rows={8}
+                      className="w-full px-3 py-2 border border-border rounded-lg focus:ring-2 focus:ring-primary/50 outline-none text-xs font-mono bg-background"
+                      placeholder='[{"questionText":"...","options":["A","B","C","D"],"correctIndex":0,"points":1}]'
+                    />
+                  </div>
+                </div>
               </section>
               <section className="grid grid-cols-1 sm:grid-cols-2 gap-5">
                 <div>
@@ -1901,7 +1880,7 @@ export function InstructorCourseEdit() {
                   className="px-6 py-3 bg-primary text-primary-foreground rounded-xl hover:bg-primary/90 disabled:opacity-50 flex items-center gap-2 font-medium"
                 >
                   {savingAssignment && <Loader2 className="w-4 h-4 animate-spin" />}
-                  {editingAssignmentId ? 'Lưu thay đổi' : 'Thêm bài tập'}
+                  {editingAssignmentId ? 'Lưu thay đổi' : 'Thêm bài thi'}
                 </button>
                 <button
                   type="button"

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, useCallback, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import {
   ArrowLeft,
   CheckCircle,
@@ -51,7 +51,18 @@ interface LearningState {
 export function Learn() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const location = useLocation();
   const { user } = useAuth();
+  const isLearner = user?.role === 'learner';
+  const fromState = (location.state as { from?: string } | null)?.from;
+  const backPath =
+    fromState === 'admin-courses'
+      ? '/admin/courses'
+      : fromState === 'instructor-courses'
+      ? '/instructor/courses'
+      : fromState === 'course-detail' && id
+      ? `/courses/${id}`
+      : '/my-courses';
 
   const [state, setState] = useState<LearningState | null>(null);
   const [currentLessonId, setCurrentLessonId] = useState<string | null>(null);
@@ -116,7 +127,8 @@ export function Learn() {
     assignmentApi
       .listByCourse(id)
       .then((res) => {
-        setAssignments(res.data?.assignments ?? []);
+        // Mobile/Web (learner) chỉ dùng bài thi cuối khóa (exam). Ẩn bài tập thường nếu còn tồn tại trong DB.
+        setAssignments((res.data?.assignments ?? []).filter((a) => a.type === 'exam'));
         setCanSubmitAssignment(res.data?.canSubmit ?? false);
       })
       .catch(() => {
@@ -470,6 +482,7 @@ useEffect(() => {
   const lessonId = currentLessonId;
 
   if (!lessonId) return;
+  if (!isLearner) return;
 
   timeTrackingRef.current.lessonId = lessonId;
   timeTrackingRef.current.lastFlushMs = Date.now();
@@ -513,7 +526,7 @@ useEffect(() => {
       timeTrackingRef.current.lessonId = null;
     }
   };
-}, [currentLessonId]);
+}, [currentLessonId, isLearner]);
 
   const openSubmitModal = (a: Assignment) => {
     const sub = mySubmissions.find((s) => (typeof s.assignmentId === 'object' ? s.assignmentId?._id : s.assignmentId) === a._id);
@@ -527,6 +540,10 @@ useEffect(() => {
     : null;
 
   const handleMarkComplete = () => {
+    if (!isLearner) {
+      toast.info('Giảng viên chỉ xem preview, không thể cập nhật tiến độ học.');
+      return;
+    }
     if (!currentLesson || isCompleted(currentLesson._id)) return;
     progressApi
       .markComplete(currentLesson._id)
@@ -712,8 +729,8 @@ useEffect(() => {
           <h2 className="text-2xl font-bold mb-4">
             {error?.includes('Access denied') ? 'Bạn chưa đăng ký khóa học này' : 'Không tìm thấy khóa học'}
           </h2>
-          <button onClick={() => navigate('/my-courses')} className="text-primary hover:underline">
-            Quay lại khóa học của tôi
+          <button onClick={() => navigate(backPath)} className="text-primary hover:underline">
+            Quay lại
           </button>
         </div>
       </div>
@@ -728,7 +745,7 @@ useEffect(() => {
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-4">
               <button
-                onClick={() => navigate('/my-courses')}
+                onClick={() => navigate(backPath)}
                 className="p-2 hover:bg-muted rounded-lg transition-colors"
               >
                 <ArrowLeft className="w-5 h-5" />
@@ -859,7 +876,7 @@ useEffect(() => {
             <div className="max-w-4xl mx-auto">
               <div className="flex items-center justify-between mb-2">
                 <h2 className="text-2xl font-bold">{currentLesson?.title}</h2>
-                {currentLesson?.type !== 'quiz' ? (
+                {currentLesson?.type !== 'quiz' && isLearner ? (
                   <button
                     type="button"
                     onClick={handleMarkComplete}
@@ -877,6 +894,10 @@ useEffect(() => {
                         : 'Hoàn thành bài học'}
                     </span>
                   </button>
+                ) : currentLesson?.type !== 'quiz' && !isLearner ? (
+                  <div className="text-sm text-muted-foreground">
+                    Chế độ xem trước dành cho giảng viên (không cập nhật tiến độ).
+                  </div>
                 ) : (
                   <div className="text-sm text-muted-foreground">
                     Bài quiz sẽ được tính hoàn thành khi bạn làm đạt.
@@ -1018,19 +1039,19 @@ useEffect(() => {
           <div className="p-4 border-t border-border">
             <h3 className="font-semibold mb-2 flex items-center gap-2">
               <ClipboardList className="w-4 h-4" />
-              Bài tập
+              Bài thi cuối khóa
             </h3>
             {loadingAssignments ? (
               <p className="text-sm text-muted-foreground">Đang tải...</p>
             ) : assignments.length === 0 ? (
-              <p className="text-sm text-muted-foreground">Khóa này chưa có bài tập.</p>
+              <p className="text-sm text-muted-foreground">Khóa này chưa có bài thi.</p>
             ) : !canSubmitAssignment ? (
               <p className="text-sm text-amber-600 dark:text-amber-400">
-                Pass hết quiz trong khóa để mở khóa nộp bài tập.
+                Pass hết quiz trong khóa để mở khóa làm bài thi.
               </p>
             ) : null}
             {assignments.length > 0 && canSubmitAssignment && (
-              <p className="text-xs text-muted-foreground mt-1">Có thể nộp lại nhiều lần để cập nhật.</p>
+              <p className="text-xs text-muted-foreground mt-1">Có thể làm lại bài thi để cập nhật kết quả.</p>
             )}
             {assignments.length > 0 && (
               <ul className="space-y-2 mt-2">

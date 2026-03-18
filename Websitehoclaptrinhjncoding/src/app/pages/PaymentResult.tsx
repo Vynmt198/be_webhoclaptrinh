@@ -4,12 +4,14 @@ import SuccessPage from './payment_result/Success';
 import FailPage from './payment_result/Fail';
 import ErrorPage from './payment_result/Error';
 import InvalidPage from './payment_result/Invalid';
+import { useCart } from '@/app/context/CartContext';
 
 const BASE_URL = 'http://localhost:3000/api';
 
 export function PaymentResult() {
     const [searchParams] = useSearchParams();
     const navigate = useNavigate();
+    const { clearCart } = useCart();
     const [loading, setLoading] = useState(true);
     const [responseCode, setResponseCode] = useState<string | null>(null);
 
@@ -88,6 +90,13 @@ export function PaymentResult() {
 
         fetchPaymentResult();
     }, [navigate, searchParams]);
+
+    // On successful payment: clear cart (keep cart on fail/cancel so user can retry).
+    useEffect(() => {
+        if (responseCode === '00') {
+            clearCart();
+        }
+    }, [responseCode, clearCart]);
 
     if (loading) {
         return (

@@ -4,7 +4,7 @@ import { Link } from 'react-router-dom';
 import { BookOpen, Clock, TrendingUp, Play, CheckCircle, Loader2, Settings } from 'lucide-react';
 import { courses } from '@/app/data/courses';
 import { useAuth } from '@/app/context/AuthContext';
-import { instructorApi, enrollmentApi, courseApi, type Course, type EnrollmentWithCourse } from '@/app/lib/api';
+import { instructorApi, enrollmentApi, courseApi, progressApi, type Course, type EnrollmentWithCourse } from '@/app/lib/api';
 
 function formatLevel(level?: string) {
   const map: Record<string, string> = {
@@ -33,6 +33,7 @@ export function MyCourses() {
   const [loading, setLoading] = useState(false);
   const [loadingEnrolled, setLoadingEnrolled] = useState(false);
   const [recommendedCourses, setRecommendedCourses] = useState<Course[]>([]);
+  const [monthlyHours, setMonthlyHours] = useState<number>(0);
   const isInstructor = user?.role === 'instructor';
 
   useEffect(() => {
@@ -54,6 +55,14 @@ export function MyCourses() {
         .then((res) => setEnrolledList(res.data?.enrollments ?? []))
         .catch(() => setEnrolledList([]))
         .finally(() => setLoadingEnrolled(false));
+
+      progressApi
+        .getMonthlyTimeSpent()
+        .then((res) => {
+          const totalSeconds = res.data?.totalSeconds ?? 0;
+          setMonthlyHours(Math.round(totalSeconds / 3600));
+        })
+        .catch(() => setMonthlyHours(0));
 
       // Load a few recommended courses from API (real data)
       courseApi
@@ -134,7 +143,7 @@ export function MyCourses() {
                     <Clock className="w-5 h-5 text-accent" />
                   </div>
                   <div>
-                    <p className="text-2xl font-bold">32h</p>
+                    <p className="text-2xl font-bold">{monthlyHours}h</p>
                     <p className="text-sm text-muted-foreground">Học tháng này</p>
                   </div>
                 </div>

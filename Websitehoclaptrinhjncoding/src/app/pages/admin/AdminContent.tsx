@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState, Fragment } from 'react';
+import { Link } from 'react-router-dom';
 import { motion } from 'motion/react';
 import { FileText, MessageSquareMore, HelpCircle, Search, Trash2, Eye, EyeOff, Loader2, ThumbsUp, MessageCircle, Star, ChevronDown, ChevronRight, ChevronLeft, Flag, XCircle } from 'lucide-react';
 import { toast } from 'sonner';
@@ -70,10 +71,6 @@ export function AdminContent() {
             setLoading(true);
             if (activeTab === 'comments') setCommentsError(null);
             if (activeTab === 'reviews') setReviewsError(null);
-            if (activeTab === 'quizzes') {
-                setLoading(false);
-                return;
-            }
             if (activeTab === 'reports') {
                 try {
                     const res = await adminApi.getContentReports({ status: reportStatusFilter, page: reportPage, limit: 20 });
@@ -176,16 +173,9 @@ export function AdminContent() {
         }
     };
 
-    const deleteReview = (id: string) => {
-        if (window.confirm('Bạn có chắc muốn xóa đánh giá này?')) {
-            reviewApi
-                .delete(id)
-                .then(() => {
-                    setReviews((prev) => prev.filter((r) => r._id !== id));
-                    toast.success('Đã xóa đánh giá.');
-                })
-                .catch((err: any) => toast.error(err?.message ?? 'Không thể xóa đánh giá.'));
-        }
+    // Admin moderation: intentionally does NOT allow deleting course reviews
+    const deleteReview = () => {
+        toast.info('Admin không được phép xóa đánh giá khóa học.');
     };
 
     const dismissReport = (reportId: string) => {
@@ -231,7 +221,6 @@ export function AdminContent() {
                     { id: 'comments', label: 'Bình luận', icon: MessageSquareMore },
                     { id: 'reports', label: 'Báo cáo bình luận', icon: Flag },
                     { id: 'reviews', label: 'Đánh giá khóa học', icon: Star },
-                    { id: 'quizzes', label: 'Câu hỏi (Quiz)', icon: HelpCircle },
                 ].map((tab) => (
                     <button
                         key={tab.id}
@@ -606,13 +595,14 @@ export function AdminContent() {
                                         <td className="px-4 py-3 text-muted-foreground max-w-xs truncate">{review.reviewText || '—'}</td>
                                         <td className="px-4 py-3 text-muted-foreground text-xs">{review.date}</td>
                                         <td className="px-4 py-3 text-right">
-                                            <button
-                                                onClick={() => deleteReview(review._id)}
-                                                className="p-1.5 text-muted-foreground hover:text-red-500 hover:bg-red-500/10 rounded-lg transition-colors"
-                                                title="Xóa đánh giá"
+                                            <Link
+                                                to={`/courses/${review.courseId}`}
+                                                state={{ from: 'admin-courses' }}
+                                                className="inline-flex items-center gap-1 px-3 py-1.5 border border-border text-muted-foreground rounded-lg hover:bg-muted transition-colors text-xs"
+                                                title="Mở trang chi tiết khóa học để xem đánh giá"
                                             >
-                                                <Trash2 className="w-4 h-4" />
-                                            </button>
+                                                Xem
+                                            </Link>
                                         </td>
                                     </tr>
                                 ))}
@@ -622,12 +612,6 @@ export function AdminContent() {
                 </motion.div>
             )}
 
-            {activeTab === 'quizzes' && (
-                <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex flex-col items-center justify-center h-48 border border-dashed border-border rounded-xl text-muted-foreground">
-                    <HelpCircle className="w-8 h-8 mb-2 opacity-50" />
-                    <p>Tính năng quản lý ngân hàng câu hỏi đang được phát triển.</p>
-                </motion.div>
-            )}
         </div>
     );
 }

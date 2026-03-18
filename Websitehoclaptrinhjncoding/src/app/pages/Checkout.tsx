@@ -3,17 +3,24 @@ import { useNavigate } from 'react-router-dom';
 import { motion } from 'motion/react';
 import { Wallet, CheckCircle, ArrowLeft } from 'lucide-react';
 import { useCart } from '@/app/context/CartContext';
-import { paymentApi } from '@/app/lib/api';
+import { enrollmentApi, paymentApi } from '@/app/lib/api';
 import { toast } from 'sonner';
 
 export function Checkout() {
   const navigate = useNavigate();
-  const { items, getTotalPrice } = useCart();
+  const { items, getTotalPrice, removeManyFromCart, clearCart } = useCart();
   const [isProcessing, setIsProcessing] = useState(false);
 
   const total = getTotalPrice();
   const discount = Math.round(total * 0.1);
   const finalTotal = total - discount;
+
+  const freeCount = items.filter((i) => (i.price ?? 0) === 0).length;
+  const paidItems = items.filter((i) => (i.price ?? 0) > 0);
+  const paidCount = paidItems.length;
+  const paidTotal = paidItems.reduce((s, i) => s + (i.price ?? 0), 0);
+  const paidDiscount = paidTotal > 0 ? Math.round(paidTotal * 0.1) : 0;
+  const paidFinalTotal = paidTotal - paidDiscount;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -21,19 +28,35 @@ export function Checkout() {
     console.log("Submit clicked. Processing VNPay redirect");
 
     try {
-      const courseIds = items.map(item => item.id);
-      console.log("Calling paymentApi with:", { amount: finalTotal, courseIds });
-      const res = await paymentApi.create({ amount: finalTotal, courseIds });
+      const freeCourseIds = items.filter((i) => (i.price ?? 0) === 0).map((i) => i.id);
+      const paidCourseIds = paidItems.map((i) => i.id);
+
+      // Enroll free courses immediately (no VNPay needed)
+      if (freeCourseIds.length > 0) {
+        await enrollmentApi.enrollFreeCourses(freeCourseIds);
+        removeManyFromCart(freeCourseIds);
+      }
+
+      // If there are no paid courses left, we're done.
+      if (paidCourseIds.length === 0) {
+        clearCart();
+        toast.success('Đã đăng ký khóa học miễn phí thành công.');
+        navigate('/my-courses', { replace: true });
+        return;
+      }
+
+      console.log("Calling paymentApi with:", { amount: paidFinalTotal, courseIds: paidCourseIds });
+      const res = await paymentApi.create({ amount: paidFinalTotal, courseIds: paidCourseIds });
       console.log("paymentApi response:", res);
       if (res.success && res.data?.paymentUrl) {
         console.log("Redirecting to:", res.data.paymentUrl);
         window.location.href = res.data.paymentUrl;
         return;
-      } else {
-        console.error("Payment API returned success but no paymentUrl", res);
-        toast.error('Lỗi khi thanh toán: Không nhận được URL thanh toán');
-        setIsProcessing(false);
       }
+
+      console.error("Payment API returned success but no paymentUrl", res);
+      toast.error('Lỗi khi thanh toán: Không nhận được URL thanh toán');
+      setIsProcessing(false);
     } catch (error: any) {
       console.error("Payment error:", error);
       toast.error(error.message || 'Lỗi khi thanh toán');
@@ -75,6 +98,24 @@ export function Checkout() {
                   Bạn sẽ được chuyển hướng an toàn tới cổng thanh toán VNPay.
                   Hỗ trợ thanh toán qua quét mã QR, thẻ ATM nội địa, và các ví điện tử.
                 </p>
+
+                {(freeCount > 0 || paidCount > 0) && (
+                  <div className="mt-6 w-full max-w-md text-left border border-border rounded-lg p-4 bg-muted/20">
+                    <p className="text-sm font-semibold mb-1">Hệ thống sẽ xử lý như sau:</p>
+                    <ul className="text-sm text-muted-foreground space-y-1">
+                      {freeCount > 0 && (
+                        <li>
+                          - <strong>{freeCount}</strong> khóa <strong>miễn phí</strong> sẽ được <strong>đăng ký ngay</strong> (không qua VNPay).
+                        </li>
+                      )}
+                      {paidCount > 0 && (
+                        <li>
+                          - <strong>{paidCount}</strong> khóa <strong>trả phí</strong> sẽ thanh toán qua VNPay: <strong>{paidFinalTotal.toLocaleString('vi-VN')}đ</strong>.
+                        </li>
+                      )}
+                    </ul>
+                  </div>
+                )}
 
                 <div className="mt-8 flex gap-4 items-center justify-center opacity-60">
                   <div className="flex items-center gap-2">

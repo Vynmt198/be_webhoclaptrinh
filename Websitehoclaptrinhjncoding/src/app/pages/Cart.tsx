@@ -2,9 +2,31 @@ import { Link } from 'react-router-dom';
 import { motion } from 'motion/react';
 import { ShoppingCart, X, ArrowRight, ShoppingBag } from 'lucide-react';
 import { useCart } from '@/app/context/CartContext';
+import { useMemo, useState } from 'react';
 
 export function Cart() {
-  const { items, removeFromCart, getTotalPrice } = useCart();
+  const { items, removeFromCart, removeManyFromCart, clearCart, getTotalPrice } = useCart();
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+
+  const allSelected = useMemo(
+    () => items.length > 0 && selectedIds.size === items.length,
+    [items.length, selectedIds.size]
+  );
+  const toggleSelectAll = () => {
+    setSelectedIds((prev) => {
+      if (items.length === 0) return prev;
+      if (prev.size === items.length) return new Set();
+      return new Set(items.map((i) => i.id));
+    });
+  };
+  const toggleSelectOne = (id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
   const total = getTotalPrice();
   const discount = total > 0 ? Math.round(total * 0.1) : 0; // 10% discount
   const finalTotal = total - discount;
@@ -50,6 +72,9 @@ export function Cart() {
         >
           <h1 className="text-3xl md:text-4xl font-bold mb-2">Giỏ Hàng</h1>
           <p className="text-muted-foreground">{items.length} khóa học trong giỏ</p>
+          <p className="text-xs text-muted-foreground mt-2">
+            Khóa <strong>miễn phí</strong> sẽ được <strong>đăng ký ngay</strong> khi bạn bấm Thanh toán. Khóa <strong>trả phí</strong> sẽ chuyển qua VNPay.
+          </p>
         </motion.div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
@@ -60,6 +85,40 @@ export function Cart() {
             transition={{ delay: 0.2, duration: 0.6 }}
             className="lg:col-span-2 space-y-4"
           >
+            <div className="flex items-center justify-between bg-card border border-border rounded-xl p-4">
+              <label className="flex items-center gap-3 text-sm font-medium cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={allSelected}
+                  onChange={toggleSelectAll}
+                  className="h-4 w-4"
+                />
+                Chọn tất cả
+              </label>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  disabled={selectedIds.size === 0}
+                  onClick={() => {
+                    removeManyFromCart(Array.from(selectedIds));
+                    setSelectedIds(new Set());
+                  }}
+                  className="px-3 py-2 text-sm border border-border rounded-lg hover:bg-muted disabled:opacity-50"
+                >
+                  Xóa đã chọn
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    clearCart();
+                    setSelectedIds(new Set());
+                  }}
+                  className="px-3 py-2 text-sm border border-border rounded-lg hover:bg-destructive/10 text-destructive"
+                >
+                  Xóa tất cả
+                </button>
+              </div>
+            </div>
             {items.map((item, index) => (
               <motion.div
                 key={item.id}
@@ -68,6 +127,15 @@ export function Cart() {
                 transition={{ delay: 0.3 + index * 0.1, duration: 0.4 }}
                 className="bg-card border border-border rounded-xl p-4 flex gap-4"
               >
+                <div className="pt-1">
+                  <input
+                    type="checkbox"
+                    checked={selectedIds.has(item.id)}
+                    onChange={() => toggleSelectOne(item.id)}
+                    className="h-4 w-4"
+                    aria-label="Chọn khóa học"
+                  />
+                </div>
                 <img
                   src={item.image}
                   alt={item.title}
@@ -86,7 +154,14 @@ export function Cart() {
                 </div>
                 <div className="flex flex-col items-end justify-between">
                   <button
-                    onClick={() => removeFromCart(item.id)}
+                    onClick={() => {
+                      removeFromCart(item.id);
+                      setSelectedIds((prev) => {
+                        const next = new Set(prev);
+                        next.delete(item.id);
+                        return next;
+                      });
+                    }}
                     className="p-2 hover:bg-muted rounded-lg transition-colors"
                   >
                     <X className="w-5 h-5 text-muted-foreground hover:text-destructive" />

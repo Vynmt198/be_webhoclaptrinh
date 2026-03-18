@@ -80,6 +80,9 @@ const validateUpdateProfile = [
     body('avatar')
         .optional()
         .isURL().withMessage('Avatar must be a valid URL'),
+    body('emailNotificationsEnabled')
+        .optional()
+        .isBoolean().withMessage('Email notifications setting must be a boolean'),
     body('instructorHeadline')
         .optional()
         .trim()
