@@ -84,6 +84,11 @@ const userSchema = new mongoose.Schema(
             type: String,
             default: null,
         },
+        // Settings
+        emailNotificationsEnabled: {
+            type: Boolean,
+            default: true,
+        },
         lastLogin: {
             type: Date,
             default: null,

@@ -57,6 +57,7 @@ const getProfile = async (req, res, next) => {
                     instructorFacebook: user.instructorFacebook,
                     instructorYoutube: user.instructorYoutube,
                     instructorLinkedin: user.instructorLinkedin,
+                    emailNotificationsEnabled: user.emailNotificationsEnabled,
                     createdAt: user.createdAt,
                     updatedAt: user.updatedAt,
                     lastLogin: user.lastLogin,
@@ -82,6 +83,7 @@ const updateProfile = async (req, res, next) => {
             instructorFacebook,
             instructorYoutube,
             instructorLinkedin,
+            emailNotificationsEnabled,
         } = req.body;
 
         // Build update object with only allowed fields
@@ -95,6 +97,7 @@ const updateProfile = async (req, res, next) => {
         if (instructorFacebook !== undefined) updates.instructorFacebook = instructorFacebook;
         if (instructorYoutube !== undefined) updates.instructorYoutube = instructorYoutube;
         if (instructorLinkedin !== undefined) updates.instructorLinkedin = instructorLinkedin;
+        if (emailNotificationsEnabled !== undefined) updates.emailNotificationsEnabled = emailNotificationsEnabled;
 
         const updatedUser = await User.findByIdAndUpdate(
             req.user._id,
@@ -121,6 +124,7 @@ const updateProfile = async (req, res, next) => {
                     instructorFacebook: updatedUser.instructorFacebook,
                     instructorYoutube: updatedUser.instructorYoutube,
                     instructorLinkedin: updatedUser.instructorLinkedin,
+                    emailNotificationsEnabled: updatedUser.emailNotificationsEnabled,
                     updatedAt: updatedUser.updatedAt,
                 },
             },

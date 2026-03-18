@@ -5,7 +5,6 @@ import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "sonner";
 import { useCart } from "@/app/context/CartContext";
 import { useAuth } from "@/app/context/AuthContext";
-import { AIChatBot } from "@/app/components/AIChatBot";
 
 export function Layout() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -365,9 +364,6 @@ export function Layout() {
       <main className="flex-1">
         <Outlet />
       </main>
-
-      {/* AI ChatBot */}
-      <AIChatBot />
 
       {/* Footer */}
       <footer className="border-t border-border/50 bg-card/50 backdrop-blur-lg mt-20">

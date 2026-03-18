@@ -146,7 +146,8 @@ export function CourseDetail() {
 
   const handleDeleteReview = (review: Review) => {
     const reviewUserId = review.userId?._id;
-    const canDelete = user && (reviewUserId === user._id || user.role === 'admin');
+    // Only the review owner can delete (admin cannot)
+    const canDelete = user && reviewUserId === user._id;
     if (!canDelete) return;
     if (!window.confirm('Bạn có chắc muốn xóa đánh giá này?')) return;
     setDeletingReviewId(review._id);
@@ -616,7 +617,7 @@ export function CourseDetail() {
                   ) : (
                     reviews.map((r) => {
                       const reviewUserId = r.userId?._id;
-                      const canDeleteReview = user && (reviewUserId === user._id || user.role === 'admin');
+                      const canDeleteReview = user && reviewUserId === user._id;
                       return (
                         <div
                           key={r._id}
