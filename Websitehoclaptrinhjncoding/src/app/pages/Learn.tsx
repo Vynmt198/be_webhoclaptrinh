@@ -398,7 +398,7 @@ const handleDeleteComment = (msg: DiscussionPost) => {
 
       toast.success('Đã xóa bình luận.');
 
-      loadChatRoom();
+      loadChatRoom(currentLessonId);
     })
     .catch((err: Error) =>
       toast.error(err?.message ?? 'Không xóa được.')
