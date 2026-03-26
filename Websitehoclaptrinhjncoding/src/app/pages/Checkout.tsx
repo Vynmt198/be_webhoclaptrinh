@@ -49,6 +49,9 @@ export function Checkout() {
       const res = await paymentApi.create({ amount: paidFinalTotal, courseIds: paidCourseIds });
       console.log("paymentApi response:", res);
       if (res.success && res.data?.paymentUrl) {
+        try {
+          sessionStorage.setItem('payment.returnPath', '/my-courses');
+        } catch (_) {}
         console.log("Redirecting to:", res.data.paymentUrl);
         window.location.href = res.data.paymentUrl;
         return;

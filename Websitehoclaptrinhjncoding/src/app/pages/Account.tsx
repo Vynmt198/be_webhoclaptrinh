@@ -1,9 +1,9 @@
 import { useState, useMemo, useEffect } from 'react';
 import { motion } from 'motion/react';
-import { User, BookOpen, Award, Settings, Bell, Loader2, Eye, EyeOff } from 'lucide-react';
+import { User, BookOpen, Award, Settings, Bell, Loader2, Eye, EyeOff, CreditCard } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAuth } from '@/app/context/AuthContext';
-import { enrollmentApi, userApi, certificateApi, type Certificate, type EnrollmentWithCourse } from '@/app/lib/api';
+import { enrollmentApi, userApi, certificateApi, paymentApi, type Certificate, type EnrollmentWithCourse, type PaymentInfo } from '@/app/lib/api';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 
 export function Account() {
@@ -21,6 +21,10 @@ export function Account() {
   const [enrolledCoursesLoading, setEnrolledCoursesLoading] = useState(false);
   const [enrolledCourses, setEnrolledCourses] = useState<EnrollmentWithCourse[]>([]);
   const [enrolledCoursesLoaded, setEnrolledCoursesLoaded] = useState(false);
+
+  const [paymentsLoading, setPaymentsLoading] = useState(false);
+  const [paymentsList, setPaymentsList] = useState<PaymentInfo[]>([]);
+  const [paymentsLoaded, setPaymentsLoaded] = useState(false);
 
   const [emailNotiEnabled, setEmailNotiEnabled] = useState<boolean>(user?.emailNotificationsEnabled ?? true);
   const [isSavingSettings, setIsSavingSettings] = useState(false);
@@ -101,6 +105,7 @@ export function Account() {
           { id: 'profile', label: 'Hồ sơ', icon: User },
           { id: 'courses', label: 'Khóa học', icon: BookOpen },
           { id: 'certificates', label: 'Chứng chỉ', icon: Award },
+          { id: 'payments', label: 'Lịch sử thanh toán', icon: CreditCard },
           { id: 'settings', label: 'Cài đặt', icon: Settings },
         ];
 
@@ -252,6 +257,20 @@ export function Account() {
                             toast.error(err instanceof Error ? err.message : 'Không thể tải danh sách khóa học.');
                           })
                           .finally(() => setEnrolledCoursesLoading(false));
+                      }
+
+                      if (tab.id === 'payments' && !paymentsLoaded && !paymentsLoading) {
+                        setPaymentsLoading(true);
+                        paymentApi
+                          .getHistory({ limit: 50 })
+                          .then((res) => {
+                            setPaymentsList(res.data?.payments ?? []);
+                            setPaymentsLoaded(true);
+                          })
+                          .catch((err: unknown) => {
+                            toast.error(err instanceof Error ? err.message : 'Không thể tải lịch sử thanh toán.');
+                          })
+                          .finally(() => setPaymentsLoading(false));
                       }
                     }}
                     className={`w-full flex items-center space-x-3 px-4 py-3 rounded-lg transition-all ${activeTab === tab.id
@@ -610,6 +629,65 @@ export function Account() {
         )}
       </div>
       )}
+
+    {/* ── Payments Tab ── */}
+    {activeTab === 'payments' && (
+      <div>
+        <h2 className="text-2xl font-bold mb-6">Lịch sử thanh toán</h2>
+
+        {paymentsLoading ? (
+          <p className="text-sm text-muted-foreground">Đang tải lịch sử thanh toán...</p>
+        ) : paymentsList.length === 0 ? (
+          <p className="text-sm text-muted-foreground">Bạn chưa có giao dịch nào.</p>
+        ) : (
+          <div className="overflow-x-auto rounded-lg border border-border">
+            <table className="w-full text-left text-sm whitespace-nowrap">
+              <thead className="bg-muted text-muted-foreground">
+                <tr>
+                  <th className="px-4 py-3 font-medium">Mã đơn hàng</th>
+                  <th className="px-4 py-3 font-medium">Khóa học / Ghi chú</th>
+                  <th className="px-4 py-3 font-medium">Số tiền</th>
+                  <th className="px-4 py-3 font-medium">Trạng thái</th>
+                  <th className="px-4 py-3 font-medium">Thời gian</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border">
+                {paymentsList.map(p => {
+                  let statusColor = "text-yellow-500 bg-yellow-500/10";
+                  let statusText = "Đang xử lý";
+                  if (p.paymentStatus === 'success') {
+                    statusColor = "text-green-500 bg-green-500/10";
+                    statusText = "Thành công";
+                  } else if (p.paymentStatus === 'failed' || p.paymentStatus === 'cancelled') {
+                    statusColor = "text-red-500 bg-red-500/10";
+                    statusText = "Thất bại";
+                  }
+
+                  let courseNames = p.orderInfo;
+                  if (p.courseIds && p.courseIds.length > 0 && typeof p.courseIds[0] === 'object' && p.courseIds[0].title) {
+                    courseNames = p.courseIds.map(c => typeof c === 'object' ? c.title : '').join(', ');
+                  } else if (p.courseId && typeof p.courseId === 'object' && p.courseId.title) {
+                    courseNames = p.courseId.title;
+                  }
+
+                  return (
+                    <tr key={p._id} className="hover:bg-muted/50 transition-colors">
+                      <td className="px-4 py-3 font-medium">{p.orderId}</td>
+                      <td className="px-4 py-3 max-w-[250px] truncate" title={courseNames}>{courseNames}</td>
+                      <td className="px-4 py-3 font-medium">{p.amount.toLocaleString()}đ</td>
+                      <td className="px-4 py-3">
+                        <span className={`px-2 py-1 rounded text-xs font-semibold ${statusColor}`}>{statusText}</span>
+                      </td>
+                      <td className="px-4 py-3 text-muted-foreground">{new Date(p.createdAt).toLocaleDateString('vi-VN', { hour: '2-digit', minute: '2-digit' })}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+    )}
 
     {/* ── Settings Tab ── */}
     {activeTab === 'settings' && (

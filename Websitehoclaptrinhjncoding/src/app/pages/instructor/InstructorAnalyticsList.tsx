@@ -11,7 +11,40 @@ export function InstructorAnalyticsList() {
   useEffect(() => {
     instructorApi
       .listMyCourses({ limit: 100 })
-      .then((res) => setCourses(res.data.courses || []))
+      .then(async (res) => {
+        const list = res.data.courses || [];
+        setCourses(list);
+
+        // Fallback: if backend doesn't provide enrollmentCount, fetch via analytics
+        const needEnrollCount = list.filter((c) => c.enrollmentCount == null);
+        if (needEnrollCount.length === 0) return;
+
+        const pairs = await Promise.all(
+          needEnrollCount.map(async (c) => {
+            try {
+              const a = await instructorApi.getAnalytics(c._id);
+              return [c._id, a.data?.totalEnrollments ?? 0] as const;
+            } catch {
+              return [c._id, null] as const;
+            }
+          })
+        );
+
+        const map = new Map<string, number>();
+        for (const [id, count] of pairs) {
+          if (typeof count === 'number') map.set(id, count);
+        }
+
+        if (map.size > 0) {
+          setCourses((prev) =>
+            prev.map((c) =>
+              c.enrollmentCount == null && map.has(c._id)
+                ? { ...c, enrollmentCount: map.get(c._id)! }
+                : c
+            )
+          );
+        }
+      })
       .catch(() => setCourses([]))
       .finally(() => setLoading(false));
   }, []);
@@ -60,7 +93,7 @@ export function InstructorAnalyticsList() {
                   <div className="min-w-0">
                     <p className="font-medium truncate">{course.title}</p>
                     <p className="text-sm text-muted-foreground">
-                      {course.enrollmentCount ?? 0} học viên · {course.status === 'active' ? 'Đã duyệt' : course.status === 'draft' ? 'Nháp' : course.status}
+                      {course.enrollmentCount ?? 0} học viên · {course.status === 'active' ? 'Đã duyệt' : course.status === 'draft' ? 'Nháp' : course.status === 'pending' ? 'Chờ duyệt' : course.status === 'rejected' ? 'Đã từ chối' : course.status === 'disabled' ? 'Đã tắt' : course.status}
                     </p>
                   </div>
                 </div>

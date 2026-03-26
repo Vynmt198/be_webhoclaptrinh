@@ -1,10 +1,19 @@
 import successAnim from "../../components/animation/Check Mark - Success.json";
 import Lottie from "lottie-react";
 import { Button } from "antd";
-import { useNavigate } from "react-router-dom";
+
+const getBasePath = () => {
+    const base = import.meta.env?.BASE_URL ?? '/';
+    return base.endsWith('/') ? base.slice(0, -1) : base;
+};
 
 export default function SuccessPage() {
-    const navigate = useNavigate();
+    const goTo = (path: string) => {
+        try { sessionStorage.setItem('payment.paid', 'true'); } catch {}
+        const base = getBasePath();
+        const href = path.startsWith('/') ? `${base}${path}` : `${base}/${path}`;
+        window.location.href = href;
+    };
 
     return (
         <div style={{
@@ -32,11 +41,11 @@ export default function SuccessPage() {
                 <p style={{ margin: 0, color: "#475569" }}>Cảm ơn bạn — giao dịch đã được xử lý thành công.</p>
 
                 <div style={{ marginTop: 20, display: "flex", gap: 12, justifyContent: "center" }}>
-                    <Button type="primary" onClick={() => navigate("/")}>Về trang chủ</Button>
+                    <Button type="primary" onClick={() => goTo("/")}>Về trang chủ</Button>
                     <Button onClick={() => {
-                        try { sessionStorage.setItem('payment.paid', 'true'); } catch {}
-                        const returnPath = (() => { try { return sessionStorage.getItem('payment.returnPath'); } catch { return null; } })();
-                        if (returnPath) navigate(returnPath); else navigate(-1);
+                        let returnPath = null;
+                        try { returnPath = sessionStorage.getItem('payment.returnPath'); } catch {}
+                        goTo(returnPath || '/my-courses');
                     }}>Quay lại</Button>
                 </div>
             </div>

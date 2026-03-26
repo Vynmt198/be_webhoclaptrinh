@@ -170,6 +170,41 @@ export const adminApi = {
             };
         }>('/admin/stats'),
 
+    listPayments: (params?: {
+        page?: number;
+        limit?: number;
+        status?: 'pending' | 'success' | 'failed' | 'cancelled' | string;
+        search?: string;
+        startDate?: string;
+        endDate?: string;
+    }) => {
+        const query = new URLSearchParams(
+            Object.entries(params || {})
+                .filter(([, v]) => v !== undefined && v !== '')
+                .map(([k, v]) => [k, String(v)])
+        ).toString();
+        return request<{
+            success: boolean;
+            data: {
+                payments: {
+                    _id: string;
+                    userId: { _id: string; fullName?: string; email?: string; role?: string; isActive?: boolean } | string;
+                    courseId?: { _id: string; title?: string } | string | null;
+                    courseIds?: ({ _id: string; title?: string } | string)[];
+                    orderId: string;
+                    amount: number;
+                    orderInfo: string;
+                    transactionNo?: string | null;
+                    bankCode?: string | null;
+                    cardType?: string | null;
+                    paymentStatus: 'pending' | 'success' | 'failed' | 'cancelled' | string;
+                    createdAt: string;
+                }[];
+                pagination: Pagination;
+            };
+        }>(`/admin/payments${query ? `?${query}` : ''}`);
+    },
+
     // Content moderation
     getContentLessons: (params?: { search?: string; page?: number; limit?: number }) => {
         const query = new URLSearchParams(
@@ -753,7 +788,8 @@ export interface PaymentInfo {
     amount: number;
     paymentStatus: string;
     orderInfo: string;
-    courseIds: string[];
+    courseId?: { title?: string; thumbnail?: string } | string | null;
+    courseIds?: ({ title?: string; thumbnail?: string } | string)[];
     createdAt: string;
 }
 
