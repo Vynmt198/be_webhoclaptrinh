@@ -12,6 +12,7 @@ const {
     listPendingCourses,
 } = require('../controllers/adminCourseController');
 const { getSystemStats } = require('../controllers/adminStatsController');
+const { adminListPayments } = require('../controllers/paymentsController');
 const {
     listLessons,
     toggleLessonVisibility,
@@ -30,6 +31,9 @@ router.use(auth, isAdmin);
 // @route   GET /api/admin/stats
 // @desc    System stats for dashboard (revenue, new students, courses, revenue chart)
 router.get('/stats', getSystemStats);
+
+// Payments
+router.get('/payments', adminListPayments);
 
 // Content moderation
 router.get('/content/lessons', listLessons);

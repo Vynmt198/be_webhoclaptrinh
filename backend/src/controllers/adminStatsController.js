@@ -37,7 +37,13 @@ exports.getSystemStats = async (req, res, next) => {
                 },
                 {
                     $group: {
-                        _id: { $dateToString: { format: '%Y-%m-%d', date: '$createdAt' } },
+                        _id: {
+                            $dateToString: {
+                                format: '%Y-%m-%d',
+                                date: '$createdAt',
+                                timezone: 'Asia/Ho_Chi_Minh',
+                            },
+                        },
                         total: { $sum: '$amount' },
                     },
                 },
@@ -49,11 +55,12 @@ exports.getSystemStats = async (req, res, next) => {
 
         const revenueByDate = Object.fromEntries((revenueByDay || []).map((r) => [r._id, r.total]));
         const revenueLast7Days = [];
+        const tz = 'Asia/Ho_Chi_Minh';
         for (let i = 0; i < 7; i++) {
             const d = new Date(startOfLast7Days);
             d.setDate(startOfLast7Days.getDate() + i);
-            const key = d.toISOString().slice(0, 10);
-            const dayOfWeek = d.getDay();
+            const key = d.toLocaleDateString('en-CA', { timeZone: tz });
+            const dayOfWeek = new Date(key + 'T12:00:00+07:00').getDay();
             revenueLast7Days.push({
                 name: DAY_LABELS[dayOfWeek],
                 total: revenueByDate[key] ?? 0,

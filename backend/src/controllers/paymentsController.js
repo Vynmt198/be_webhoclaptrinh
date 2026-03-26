@@ -294,7 +294,9 @@ exports.getPaymentHistory = async (req, res, next) => {
             .sort({ createdAt: -1 })
             .limit(limit * 1)
             .skip((page - 1) * limit)
-            .select('-vnpayData');
+            .select('-vnpayData')
+            .populate('courseId', 'title thumbnail')
+            .populate('courseIds', 'title thumbnail');
 
         const count = await Payment.countDocuments(query);
 
@@ -370,6 +372,79 @@ exports.getPaymentStats = async (req, res, next) => {
                 stats,
                 total,
                 totalSuccessAmount: totalAmount[0]?.total || 0,
+            },
+        });
+    } catch (error) {
+        next(error);
+    }
+};
+
+/**
+ * Admin: list all payments with pagination & filters.
+ * @route GET /api/admin/payments
+ * @access Admin
+ */
+exports.adminListPayments = async (req, res, next) => {
+    try {
+        const {
+            page = 1,
+            limit = 10,
+            status,
+            search,
+            startDate,
+            endDate,
+        } = req.query;
+
+        const query = {};
+
+        if (status) query.paymentStatus = status;
+
+        if (startDate || endDate) {
+            query.createdAt = {};
+            if (startDate) query.createdAt.$gte = new Date(startDate);
+            if (endDate) query.createdAt.$lte = new Date(endDate);
+        }
+
+        // Simple search by orderId / transactionNo / bankCode / cardType / orderInfo
+        if (search && String(search).trim()) {
+            const s = String(search).trim();
+            query.$or = [
+                { orderId: { $regex: s, $options: 'i' } },
+                { transactionNo: { $regex: s, $options: 'i' } },
+                { bankCode: { $regex: s, $options: 'i' } },
+                { cardType: { $regex: s, $options: 'i' } },
+                { orderInfo: { $regex: s, $options: 'i' } },
+            ];
+        }
+
+        const p = Math.max(1, parseInt(page, 10) || 1);
+        const l = Math.min(100, Math.max(1, parseInt(limit, 10) || 10));
+        const skip = (p - 1) * l;
+
+        const [payments, count] = await Promise.all([
+            Payment.find(query)
+                .sort({ createdAt: -1 })
+                .limit(l)
+                .skip(skip)
+                .select('-vnpayData')
+                .populate('userId', 'fullName email role isActive')
+                .populate('courseId', 'title')
+                .populate('courseIds', 'title'),
+            Payment.countDocuments(query),
+        ]);
+
+        res.status(200).json({
+            success: true,
+            data: {
+                payments,
+                pagination: {
+                    total: count,
+                    page: p,
+                    limit: l,
+                    totalPages: Math.ceil(count / l),
+                    hasNextPage: p < Math.ceil(count / l),
+                    hasPrevPage: p > 1,
+                },
             },
         });
     } catch (error) {

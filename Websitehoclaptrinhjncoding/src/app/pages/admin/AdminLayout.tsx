@@ -1,12 +1,18 @@
 import { Outlet, NavLink, Navigate } from 'react-router-dom';
 import { useAuth } from '@/app/context/AuthContext';
-import { Users, BookOpen, FileText, PieChart, ShieldAlert } from 'lucide-react';
+import { Users, BookOpen, FileText, PieChart, ShieldAlert, Loader2 } from 'lucide-react';
 import { motion } from 'motion/react';
 
 export function AdminLayout() {
     const { user, isLoading } = useAuth();
 
-    if (isLoading) return null;
+    if (isLoading) {
+        return (
+            <div className="flex items-center justify-center py-20">
+                <Loader2 className="w-10 h-10 text-primary animate-spin" />
+            </div>
+        );
+    }
 
     if (user?.role !== 'admin') {
         return <Navigate to="/" replace />;
